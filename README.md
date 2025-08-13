@@ -1,66 +1,83 @@
-This is a new [**React Native**](https://reactnative.dev) project, bootstrapped using [`@react-native-community/cli`](https://github.com/react-native-community/cli).
+# PokePot - Poker Session Manager
 
-# Getting Started
+PokePot is a React Native mobile application for managing poker sessions, tracking player buy-ins/cash-outs, and handling settlements with voice command integration and WhatsApp sharing capabilities.
 
-> **Note**: Make sure you have completed the [Set Up Your Environment](https://reactnative.dev/docs/set-up-your-environment) guide before proceeding.
+## 🚀 Features
 
-## Step 1: Start Metro
+- **Session Management**: Create and manage poker sessions
+- **Player Tracking**: Track buy-ins, cash-outs, and balances
+- **Voice Commands**: Voice-controlled transaction entry
+- **Settlement Calculations**: Automatic settlement calculations with verification
+- **Database**: Local SQLite database with WAL mode for performance
+- **Health Monitoring**: Built-in health check and status monitoring
 
-First, you will need to run **Metro**, the JavaScript build tool for React Native.
+## 📋 Requirements
 
-To start the Metro dev server, run the following command from the root of your React Native project:
+- **Node.js**: 18+ (see `engines` in package.json)
+- **React Native**: 0.73+ with TypeScript 5.3+
+- **iOS**: Xcode 14+ / iOS 13+ 
+- **Android**: Android SDK 31+ / API Level 31+
 
-```sh
-# Using npm
+## 🛠 Development Setup
+
+### Prerequisites
+
+1. Complete the [React Native Environment Setup](https://reactnative.dev/docs/set-up-your-environment)
+2. Ensure you have the required Node.js version: `node --version` should show 18+
+
+### Quick Start
+
+```bash
+# Clone the repository
+git clone <repository-url>
+cd HomePoker_v2
+
+# Install dependencies
+npm install
+
+# iOS only: Install CocoaPods dependencies
+cd ios && pod install && cd ..
+
+# Start Metro bundler
 npm start
 
-# OR using Yarn
-yarn start
+# In a new terminal, run the app
+npm run android  # for Android
+npm run ios      # for iOS
 ```
 
-## Step 2: Build and run your app
+## 📱 Development Workflow
 
-With Metro running, open a new terminal window/pane from the root of your React Native project, and use one of the following commands to build and run your Android or iOS app:
+### Available Scripts
 
-### Android
+| Command | Description |
+|---------|-------------|
+| `npm start` | Start Metro bundler |
+| `npm run android` | Run on Android emulator/device |
+| `npm run ios` | Run on iOS simulator/device |
+| `npm test` | Run Jest tests with coverage |
+| `npm run typecheck` | Run TypeScript type checking |
+| `npm run lint` | Run ESLint code analysis |
+| `npm run build:android` | Build Android release APK |
+| `npm run build:ios` | Build iOS archive for App Store |
+| `npm run clean` | Clean React Native cache |
 
-```sh
-# Using npm
-npm run android
+### Development Environment
 
-# OR using Yarn
-yarn android
-```
+**Metro Bundler**: Starts on http://localhost:8081
+- Hot reload enabled by default
+- Fast refresh for React components
+- Error overlay for debugging
 
-### iOS
+**Database**: SQLite with WAL mode
+- Local development database: `pokepot.db`
+- Schema located in: `database/schema.sql`
+- Health check available in app
 
-For iOS, remember to install CocoaPods dependencies (this only needs to be run on first clone or after updating native deps).
-
-The first time you create a new project, run the Ruby bundler to install CocoaPods itself:
-
-```sh
-bundle install
-```
-
-Then, and every time you update your native dependencies, run:
-
-```sh
-bundle exec pod install
-```
-
-For more information, please visit [CocoaPods Getting Started guide](https://guides.cocoapods.org/using/getting-started.html).
-
-```sh
-# Using npm
-npm run ios
-
-# OR using Yarn
-yarn ios
-```
-
-If everything is set up correctly, you should see your new app running in the Android Emulator, iOS Simulator, or your connected device.
-
-This is one way to run your app — you can also build it directly from Android Studio or Xcode.
+**Health Check**: Available at app startup
+- App status and version info
+- Database connectivity verification
+- System information display
 
 ## Step 3: Modify your app
 

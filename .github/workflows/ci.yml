@@ -1,0 +1,194 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  test:
+    name: Test & Lint
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+        
+    - name: Install dependencies
+      run: npm ci
+      
+    - name: Run TypeScript type checking
+      run: npm run typecheck
+      
+    - name: Run ESLint
+      run: npm run lint
+      
+    - name: Run tests
+      run: npm test -- --coverage --watchAll=false
+      
+    - name: Upload coverage reports
+      uses: codecov/codecov-action@v4
+      with:
+        file: ./coverage/lcov.info
+        fail_ci_if_error: false
+        
+  build-android:
+    name: Build Android
+    runs-on: ubuntu-latest
+    needs: test
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+        
+    - name: Setup Java
+      uses: actions/setup-java@v4
+      with:
+        distribution: 'temurin'
+        java-version: '17'
+        
+    - name: Install dependencies
+      run: npm ci
+      
+    - name: Cache Gradle packages
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.gradle/caches
+          ~/.gradle/wrapper
+        key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+        restore-keys: |
+          ${{ runner.os }}-gradle-
+          
+    - name: Build Android Debug APK
+      run: |
+        cd android
+        ./gradlew assembleDebug --no-daemon
+        
+    - name: Upload APK artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: android-debug-apk
+        path: android/app/build/outputs/apk/debug/app-debug.apk
+        retention-days: 7
+        
+  build-ios:
+    name: Build iOS
+    runs-on: macos-latest
+    needs: test
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+        
+    - name: Install dependencies
+      run: npm ci
+      
+    - name: Install CocoaPods
+      run: |
+        cd ios
+        pod install
+        
+    - name: Build iOS
+      run: |
+        cd ios
+        xcodebuild -workspace PokePot.xcworkspace \
+          -scheme PokePot \
+          -configuration Debug \
+          -destination 'generic/platform=iOS Simulator' \
+          -derivedDataPath build \
+          build
+          
+  security:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Run npm audit
+      run: npm audit --audit-level=moderate
+      continue-on-error: true
+      
+    - name: Run Snyk security scan
+      uses: snyk/actions/node@master
+      continue-on-error: true
+      env:
+        SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+      with:
+        args: --severity-threshold=high
+        
+  performance:
+    name: Performance Check
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+        
+    - name: Install dependencies
+      run: npm ci
+      
+    - name: Check bundle size
+      run: |
+        npx react-native bundle \
+          --platform android \
+          --dev false \
+          --entry-file index.js \
+          --bundle-output bundle-size-check.js \
+          --reset-cache
+        
+        BUNDLE_SIZE=$(wc -c < bundle-size-check.js)
+        echo "Bundle size: $BUNDLE_SIZE bytes"
+        
+        # Fail if bundle exceeds 50MB (story requirement)
+        MAX_SIZE=52428800  # 50MB in bytes
+        if [ $BUNDLE_SIZE -gt $MAX_SIZE ]; then
+          echo "Bundle size exceeds 50MB limit"
+          exit 1
+        fi
+        
+  release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    needs: [test, build-android, build-ios]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Create Release
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: v${{ github.run_number }}
+        release_name: Release v${{ github.run_number }}
+        body: |
+          Automated release from CI/CD pipeline
+          
+          Changes in this release:
+          ${{ github.event.head_commit.message }}
+        draft: false
+        prerelease: false

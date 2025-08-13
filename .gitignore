@@ -73,3 +73,29 @@ yarn-error.log
 !.yarn/releases
 !.yarn/sdks
 !.yarn/versions
+
+# Environment files
+.env
+.env.local
+.env.development
+.env.production
+.env.test
+
+# Database files (keep schema.sql but ignore actual database files)
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
+# Test coverage files
+lcov.info
+coverage/
+
+# TypeScript cache
+*.tsbuildinfo
+
+# Logs
+*.log
+
+# Project specific
+# Keep documentation and .bmad-core for development agent configuration
