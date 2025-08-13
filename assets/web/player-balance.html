@@ -1,0 +1,586 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="theme-color" content="#0f3460">
+    <meta name="msapplication-TileColor" content="#0f3460">
+    <meta http-equiv="X-Content-Type-Options" content="nosniff">
+    <meta http-equiv="X-Frame-Options" content="DENY">
+    <meta http-equiv="X-XSS-Protection" content="1; mode=block">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'unsafe-inline'; style-src 'unsafe-inline';">
+    <title>PokePot - Player Balance</title>
+    <style>
+        /* Reset and base styles */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background-color: #f5f7fa;
+            color: #333;
+            line-height: 1.5;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Header styles */
+        .header {
+            background: linear-gradient(135deg, #0f3460 0%, #1e5f8b 100%);
+            color: white;
+            padding: max(env(safe-area-inset-top, 20px), 20px) 20px calc(30px + env(safe-area-inset-bottom, 0px)) 20px;
+            text-align: center;
+            box-shadow: 0 2px 10px rgba(15, 52, 96, 0.2);
+            /* iOS Safari fixes */
+            padding-left: max(env(safe-area-inset-left, 20px), 20px);
+            padding-right: max(env(safe-area-inset-right, 20px), 20px);
+        }
+
+        .session-name {
+            font-size: 22px;
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+
+        .status-indicator {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background-color: #4caf50;
+        }
+
+        .status-dot.ended {
+            background-color: #f44336;
+        }
+
+        .status-text {
+            font-size: 14px;
+            opacity: 0.9;
+        }
+
+        /* Main content */
+        .main {
+            flex: 1;
+            padding: 20px;
+            max-width: 480px;
+            width: 100%;
+            margin: 0 auto;
+        }
+
+        .card {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 15px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        .card-label {
+            font-size: 12px;
+            color: #666;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 8px;
+            text-align: center;
+        }
+
+        .player-name {
+            font-size: 18px;
+            font-weight: bold;
+            color: #0f3460;
+            text-align: center;
+        }
+
+        /* Balance display */
+        .balance-card {
+            text-align: center;
+            padding: 30px 20px;
+        }
+
+        .balance-amount {
+            font-size: 36px;
+            font-weight: bold;
+            margin: 10px 0;
+        }
+
+        .balance-positive {
+            color: #2e7d32;
+        }
+
+        .balance-negative {
+            color: #d32f2f;
+        }
+
+        .balance-zero {
+            color: #666;
+        }
+
+        .balance-description {
+            font-size: 14px;
+            color: #666;
+            font-style: italic;
+        }
+
+        /* Update info */
+        .update-info {
+            text-align: center;
+        }
+
+        .update-time {
+            font-size: 14px;
+            color: #333;
+        }
+
+        .update-error {
+            font-size: 12px;
+            color: #d32f2f;
+            margin-top: 5px;
+        }
+
+        /* Buttons */
+        .refresh-btn {
+            background: #0f3460;
+            color: white;
+            border: none;
+            padding: 16px 24px;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            width: 100%;
+            cursor: pointer;
+            transition: background-color 0.2s;
+            -webkit-appearance: none;
+            -webkit-tap-highlight-color: transparent;
+            appearance: none;
+            min-height: 44px;
+            /* Enhanced touch support */
+            touch-action: manipulation;
+            user-select: none;
+        }
+
+        .refresh-btn:hover {
+            background: #1e5f8b;
+        }
+
+        .refresh-btn:active {
+            background: #0a2744;
+        }
+
+        .refresh-btn:disabled {
+            background: #ccc;
+            color: #999;
+            cursor: not-allowed;
+        }
+
+        /* Loading state */
+        .loading {
+            text-align: center;
+            padding: 60px 20px;
+        }
+
+        .loading-spinner {
+            width: 40px;
+            height: 40px;
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #0f3460;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 15px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* Error state */
+        .error-card {
+            background: #fff3e0;
+            border: 1px solid #ffb74d;
+            color: #bf360c;
+            text-align: center;
+            padding: 20px;
+        }
+
+        .error-title {
+            font-size: 16px;
+            font-weight: bold;
+            margin-bottom: 8px;
+            color: #e65100;
+        }
+
+        .error-message {
+            font-size: 14px;
+            line-height: 1.4;
+        }
+
+        /* Footer */
+        .footer {
+            background: white;
+            padding: 12px max(env(safe-area-inset-right, 20px), 20px) max(env(safe-area-inset-bottom, 12px), 12px) max(env(safe-area-inset-left, 20px), 20px);
+            border-top: 1px solid #e0e0e0;
+            text-align: center;
+        }
+
+        /* Screen reader only content */
+        .sr-only {
+            position: absolute;
+            width: 1px;
+            height: 1px;
+            padding: 0;
+            margin: -1px;
+            overflow: hidden;
+            clip: rect(0, 0, 0, 0);
+            white-space: nowrap;
+            border: 0;
+        }
+
+        .footer-text {
+            font-size: 11px;
+            color: #999;
+        }
+
+        /* Responsive adjustments */
+        @media (max-width: 320px) {
+            .balance-amount {
+                font-size: 28px;
+            }
+            
+            .session-name {
+                font-size: 18px;
+            }
+        }
+
+        @media (min-width: 480px) {
+            .main {
+                padding: 30px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Header -->
+    <div class="header" role="banner">
+        <h1 class="session-name" id="sessionName" aria-live="polite">Loading...</h1>
+        <div class="status-indicator" role="status" aria-live="polite">
+            <div class="status-dot" id="statusDot" aria-hidden="true"></div>
+            <div class="status-text" id="statusText">Checking...</div>
+        </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="main" id="mainContent">
+        <!-- Loading State -->
+        <div class="loading" id="loadingState" role="status" aria-live="polite">
+            <div class="loading-spinner" aria-hidden="true"></div>
+            <div>Loading balance...</div>
+        </div>
+
+        <!-- Content (hidden initially) -->
+        <div id="contentState" style="display: none;">
+            <!-- Player Info -->
+            <div class="card">
+                <div class="card-label">Player</div>
+                <div class="player-name" id="playerName">-</div>
+            </div>
+
+            <!-- Balance Display -->
+            <div class="card balance-card">
+                <div class="card-label">Current Balance</div>
+                <div class="balance-amount" id="balanceAmount">$0.00</div>
+                <div class="balance-description" id="balanceDescription">-</div>
+            </div>
+
+            <!-- Last Update -->
+            <div class="card">
+                <div class="card-label">Last Updated</div>
+                <div class="update-info">
+                    <div class="update-time" id="updateTime">-</div>
+                    <div class="update-error" id="updateError" style="display: none;"></div>
+                </div>
+            </div>
+
+            <!-- Refresh Button -->
+            <button class="refresh-btn" id="refreshBtn" onclick="handleRefresh()" aria-describedby="refreshHelp">
+                Refresh Balance
+            </button>
+            <div id="refreshHelp" class="sr-only">Manually update your current balance from the organizer</div>
+        </div>
+
+        <!-- Error State -->
+        <div class="error-card" id="errorState" style="display: none;">
+            <div class="error-title">Connection Error</div>
+            <div class="error-message" id="errorMessage">
+                Unable to load balance information. Please try again.
+            </div>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <div class="footer">
+        <div class="footer-text">Balance updates manually • No real-time sync</div>
+    </div>
+
+    <script>
+        // Global state
+        let currentSessionId = null;
+        let currentPlayerId = null;
+        let lastRefresh = new Date();
+        let isRefreshing = false;
+
+        // Validate input to prevent XSS
+        function sanitizeInput(input) {
+            if (typeof input !== 'string') return '';
+            return input.replace(/[<>"'&]/g, function(match) {
+                const escapeMap = {
+                    '<': '&lt;',
+                    '>': '&gt;',
+                    '"': '&quot;',
+                    "'": '&#x27;',
+                    '&': '&amp;'
+                };
+                return escapeMap[match];
+            });
+        }
+
+        // Validate UUID format
+        function isValidUUID(str) {
+            const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+            return uuidRegex.test(str);
+        }
+
+        // Extract session and player IDs from URL
+        function parseUrl() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const pathParts = window.location.pathname.split('/');
+            
+            // Handle different URL formats
+            // Format: /session/{sessionId}/player/{playerId}
+            const sessionIndex = pathParts.indexOf('session');
+            const playerIndex = pathParts.indexOf('player');
+            
+            let sessionId = '';
+            let playerId = '';
+            
+            if (sessionIndex !== -1 && playerIndex !== -1) {
+                sessionId = sanitizeInput(pathParts[sessionIndex + 1]);
+                playerId = sanitizeInput(pathParts[playerIndex + 1]);
+            }
+            
+            // Fallback to query parameters
+            if (!sessionId) sessionId = sanitizeInput(urlParams.get('sessionId'));
+            if (!playerId) playerId = sanitizeInput(urlParams.get('playerId'));
+            
+            // Validate UUID format
+            if (sessionId && !isValidUUID(sessionId)) sessionId = '';
+            if (playerId && !isValidUUID(playerId)) playerId = '';
+            
+            currentSessionId = sessionId;
+            currentPlayerId = playerId;
+            
+            return { sessionId: currentSessionId, playerId: currentPlayerId };
+        }
+
+        // Show different UI states
+        function showLoading() {
+            document.getElementById('loadingState').style.display = 'block';
+            document.getElementById('contentState').style.display = 'none';
+            document.getElementById('errorState').style.display = 'none';
+        }
+
+        function showContent() {
+            document.getElementById('loadingState').style.display = 'none';
+            document.getElementById('contentState').style.display = 'block';
+            document.getElementById('errorState').style.display = 'none';
+        }
+
+        function showError(message) {
+            document.getElementById('loadingState').style.display = 'none';
+            document.getElementById('contentState').style.display = 'none';
+            document.getElementById('errorState').style.display = 'block';
+            document.getElementById('errorMessage').textContent = message;
+        }
+
+        // Format currency
+        function formatCurrency(amount) {
+            return new Intl.NumberFormat('en-US', {
+                style: 'currency',
+                currency: 'USD',
+                minimumFractionDigits: 2
+            }).format(Math.abs(amount));
+        }
+
+        // Format time difference
+        function formatTimeDiff(date) {
+            const now = new Date();
+            const diffMs = now.getTime() - date.getTime();
+            const diffMins = Math.floor(diffMs / 60000);
+            
+            if (diffMins < 1) return 'Just now';
+            if (diffMins < 60) return `${diffMins} minutes ago`;
+            
+            const diffHours = Math.floor(diffMins / 60);
+            if (diffHours < 24) return `${diffHours} hours ago`;
+            
+            return date.toLocaleDateString();
+        }
+
+        // Update UI with balance data
+        function updateUI(data) {
+            if (!data) return;
+
+            // Update header
+            document.getElementById('sessionName').textContent = data.sessionName || 'Poker Session';
+            
+            const statusDot = document.getElementById('statusDot');
+            const statusText = document.getElementById('statusText');
+            if (data.sessionActive) {
+                statusDot.className = 'status-dot';
+                statusText.textContent = 'Active';
+            } else {
+                statusDot.className = 'status-dot ended';
+                statusText.textContent = 'Ended';
+            }
+
+            // Update player info
+            document.getElementById('playerName').textContent = data.playerName || 'Unknown';
+
+            // Update balance
+            const balance = data.balance || 0;
+            const balanceAmount = document.getElementById('balanceAmount');
+            const balanceDescription = document.getElementById('balanceDescription');
+            
+            if (balance > 0) {
+                balanceAmount.textContent = `+${formatCurrency(balance)}`;
+                balanceAmount.className = 'balance-amount balance-positive';
+                balanceDescription.textContent = 'You are ahead';
+            } else if (balance < 0) {
+                balanceAmount.textContent = `-${formatCurrency(balance)}`;
+                balanceAmount.className = 'balance-amount balance-negative';
+                balanceDescription.textContent = 'You owe money';
+            } else {
+                balanceAmount.textContent = formatCurrency(0);
+                balanceAmount.className = 'balance-amount balance-zero';
+                balanceDescription.textContent = 'You are even';
+            }
+
+            // Update last refresh time
+            document.getElementById('updateTime').textContent = formatTimeDiff(lastRefresh);
+
+            // Update refresh button state
+            const refreshBtn = document.getElementById('refreshBtn');
+            refreshBtn.disabled = !data.sessionActive || isRefreshing;
+            refreshBtn.textContent = isRefreshing ? 'Refreshing...' : 'Refresh Balance';
+
+            showContent();
+        }
+
+        // Simulate API call (in real implementation, this would make HTTP requests)
+        async function fetchBalanceData() {
+            if (!currentSessionId || !currentPlayerId) {
+                throw new Error('Missing session or player information');
+            }
+
+            // Simulate API delay
+            await new Promise(resolve => setTimeout(resolve, 800));
+
+            // Mock data for demonstration
+            // In real implementation, this would call SessionUrlService.getPlayerBalance()
+            const mockResponse = {
+                sessionName: "Friday Night Poker",
+                playerName: "Player " + currentPlayerId.slice(-4),
+                balance: Math.floor(Math.random() * 200) - 100, // Random balance between -100 and +100
+                sessionActive: Math.random() > 0.3, // 70% chance active
+                lastUpdated: new Date().toISOString()
+            };
+
+            return mockResponse;
+        }
+
+        // Load balance data
+        async function loadBalance(showLoadingUI = true) {
+            try {
+                if (showLoadingUI) showLoading();
+                
+                const data = await fetchBalanceData();
+                lastRefresh = new Date();
+                updateUI(data);
+                
+                // Hide any previous error
+                document.getElementById('updateError').style.display = 'none';
+            } catch (error) {
+                console.error('Failed to load balance:', error);
+                
+                if (showLoadingUI) {
+                    showError(error.message);
+                } else {
+                    // Show inline error for refresh failures
+                    const errorEl = document.getElementById('updateError');
+                    errorEl.textContent = `Last refresh failed: ${error.message}`;
+                    errorEl.style.display = 'block';
+                }
+            }
+        }
+
+        // Handle manual refresh
+        async function handleRefresh() {
+            if (isRefreshing) return;
+            
+            try {
+                isRefreshing = true;
+                document.getElementById('refreshBtn').disabled = true;
+                document.getElementById('refreshBtn').textContent = 'Refreshing...';
+                
+                await loadBalance(false);
+            } finally {
+                isRefreshing = false;
+            }
+        }
+
+        // Initialize app
+        function init() {
+            const { sessionId, playerId } = parseUrl();
+            
+            if (!sessionId || !playerId) {
+                showError('Invalid session link. Please scan the QR code again.');
+                return;
+            }
+            
+            // Load initial data
+            loadBalance();
+        }
+
+        // Start the app when page loads
+        document.addEventListener('DOMContentLoaded', init);
+
+        // Handle page visibility changes (refresh when returning to page)
+        document.addEventListener('visibilitychange', function() {
+            if (!document.hidden && currentSessionId && currentPlayerId) {
+                // Small delay to ensure proper state
+                setTimeout(() => loadBalance(false), 500);
+            }
+        });
+
+        // Auto-refresh every 5 minutes when page is visible
+        setInterval(() => {
+            if (!document.hidden && !isRefreshing) {
+                loadBalance(false);
+            }
+        }, 300000); // 5 minutes
+    </script>
+</body>
+</html>

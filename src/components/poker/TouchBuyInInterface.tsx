@@ -14,7 +14,7 @@ import {
 import QuickBuyInPanel from './QuickBuyInPanel';
 import PlayerSelectionGrid from './PlayerSelectionGrid';
 import PokerChipCalculator from './PokerChipCalculator';
-import ErrorBoundary from '../common/ErrorBoundary';
+import { ErrorBoundary } from '../common/ErrorBoundary';
 import {
   getResponsiveStyles,
   landscapeStyles,
@@ -255,7 +255,7 @@ const TouchBuyInInterfaceComponent: React.FC<TouchBuyInInterfaceProps> = ({
 
   return (
     <ErrorBoundary
-      onError={(error, errorInfo) => {
+      onError={(error: Error, errorInfo: any) => {
         console.error('TouchBuyInInterface error:', error, errorInfo);
         onError?.(`Touch interface error: ${error.message}`);
       }}
