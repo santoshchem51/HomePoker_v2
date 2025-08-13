@@ -39,6 +39,46 @@ jest.mock('@react-native-voice/voice', () => ({
   },
 }));
 
+// Mock React Native Gesture Handler
+jest.mock('react-native-gesture-handler', () => ({
+  GestureHandlerRootView: ({ children }) => children,
+  PanGestureHandler: ({ children }) => children,
+  PanGestureHandlerGestureEvent: jest.fn(),
+  TapGestureHandler: ({ children }) => children,
+  FlingGestureHandler: ({ children }) => children,
+  ForceTouchGestureHandler: ({ children }) => children,
+  LongPressGestureHandler: ({ children }) => children,
+  PinchGestureHandler: ({ children }) => children,
+  RotationGestureHandler: ({ children }) => children,
+  RawButton: ({ children }) => children,
+  BaseButton: ({ children }) => children,
+  RectButton: ({ children }) => children,
+  BorderlessButton: ({ children }) => children,
+  ScrollView: ({ children }) => children,
+  Switch: ({ children }) => children,
+  TextInput: ({ children }) => children,
+  ToolbarAndroid: ({ children }) => children,
+  ViewPagerAndroid: ({ children }) => children,
+  DrawerLayoutAndroid: ({ children }) => children,
+  WebView: ({ children }) => children,
+  State: {
+    UNDETERMINED: 0,
+    FAILED: 1,
+    BEGAN: 2,
+    CANCELLED: 3,
+    ACTIVE: 4,
+    END: 5,
+  },
+  Directions: {
+    RIGHT: 1,
+    LEFT: 2,
+    UP: 4,
+    DOWN: 8,
+  },
+  createNativeWrapper: jest.fn((Component) => Component),
+  gestureHandlerRootHOC: jest.fn((Component) => Component),
+}));
+
 // Mock specific React Native components that cause issues in tests
 jest.mock('react-native', () => {
   // Create a more comprehensive mock to avoid TurboModule issues
@@ -108,6 +148,22 @@ jest.mock('react-native', () => {
     },
     AppRegistry: {
       registerComponent: jest.fn(),
+    },
+    PermissionsAndroid: {
+      PERMISSIONS: {
+        RECORD_AUDIO: 'android.permission.RECORD_AUDIO',
+      },
+      RESULTS: {
+        GRANTED: 'granted',
+        DENIED: 'denied',
+        NEVER_ASK_AGAIN: 'never_ask_again',
+      },
+      check: jest.fn(() => Promise.resolve(true)),
+      request: jest.fn(() => Promise.resolve('granted')),
+    },
+    Vibration: {
+      vibrate: jest.fn(),
+      cancel: jest.fn(),
     },
   };
 });

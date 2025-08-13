@@ -18,6 +18,10 @@ interface VoiceStore {
   showConfirmationDialog: boolean;
   isProcessingBuyIn: boolean;
   
+  // Voice fallback state - Story 2.6A
+  inputMode: 'voice' | 'manual';
+  voiceAvailable: boolean;
+  
   // Actions
   setState: (state: VoiceRecognitionState) => void;
   setListening: (listening: boolean) => void;
@@ -31,6 +35,10 @@ interface VoiceStore {
   setParsedCommand: (command: CommandResult | null) => void;
   setShowConfirmationDialog: (show: boolean) => void;
   setIsProcessingBuyIn: (processing: boolean) => void;
+  
+  // Voice fallback actions - Story 2.6A
+  setInputMode: (mode: 'voice' | 'manual') => void;
+  setVoiceAvailable: (available: boolean) => void;
   
   // Composite actions
   startListening: () => void;
@@ -53,6 +61,10 @@ export const useVoiceStore = create<VoiceStore>((set) => ({
   showConfirmationDialog: false,
   isProcessingBuyIn: false,
   
+  // Voice fallback initial state - Story 2.6A
+  inputMode: 'voice',
+  voiceAvailable: false,
+  
   // Basic setters
   setState: (state) => set({ state }),
   setListening: (isListening) => set({ isListening }),
@@ -66,6 +78,10 @@ export const useVoiceStore = create<VoiceStore>((set) => ({
   setParsedCommand: (parsedCommand) => set({ parsedCommand }),
   setShowConfirmationDialog: (showConfirmationDialog) => set({ showConfirmationDialog }),
   setIsProcessingBuyIn: (isProcessingBuyIn) => set({ isProcessingBuyIn }),
+  
+  // Voice fallback setters - Story 2.6A
+  setInputMode: (inputMode) => set({ inputMode }),
+  setVoiceAvailable: (voiceAvailable) => set({ voiceAvailable }),
   
   // Composite actions
   startListening: () => set({
@@ -93,5 +109,6 @@ export const useVoiceStore = create<VoiceStore>((set) => ({
     parsedCommand: null,
     showConfirmationDialog: false,
     isProcessingBuyIn: false,
+    // Note: inputMode and voiceAvailable are not reset as they should persist across sessions
   }),
 }));

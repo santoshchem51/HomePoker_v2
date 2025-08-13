@@ -72,6 +72,10 @@ class VoiceService {
 
       this.isInitialized = true;
     } catch (error) {
+      // Reset initialization state on error
+      this.isInitialized = false;
+      this.capabilities = null;
+      
       if (error instanceof ServiceError) {
         throw error;
       }
@@ -104,11 +108,59 @@ class VoiceService {
     }
   }
 
+  /**
+   * Story 2.6A: Basic voice capability detection on startup only
+   * Simple startup detection without runtime monitoring with 5-second timeout
+   */
+  public async checkStartupCapabilities(): Promise<boolean> {
+    try {
+      // Implement 5-second timeout for capability detection
+      const capabilityPromise = this.checkCapabilities();
+      const timeoutPromise = new Promise<VoiceServiceCapabilities>((_, reject) => {
+        setTimeout(() => {
+          reject(new ServiceError(
+            VOICE_ERROR_CODES.VOICE_TIMEOUT,
+            'Voice capability detection timed out after 5 seconds'
+          ));
+        }, 5000);
+      });
+
+      const capabilities = await Promise.race([capabilityPromise, timeoutPromise]);
+      const isVoiceReady = capabilities.available && capabilities.permissionGranted;
+      
+      // Store capabilities for app session
+      this.capabilities = capabilities;
+      
+      return isVoiceReady;
+    } catch (error) {
+      console.warn('Startup voice capability check failed:', error);
+      // Gracefully handle failures - assume voice is not available
+      this.capabilities = {
+        available: false,
+        permissionGranted: false,
+        supportsSpeechRecognition: false,
+        platform: Platform.OS as 'ios' | 'android',
+      };
+      return false;
+    }
+  }
+
   public async isAvailable(): Promise<boolean> {
     if (!this.capabilities) {
       this.capabilities = await this.checkCapabilities();
     }
     return this.capabilities.available && this.capabilities.permissionGranted;
+  }
+
+  /**
+   * Reset the service state - used for testing
+   */
+  public reset(): void {
+    this.isInitialized = false;
+    this.capabilities = null;
+    this.clearTimeout();
+    this.onResultCallback = null;
+    this.onErrorCallback = null;
   }
 
   public async startListening(): Promise<void> {

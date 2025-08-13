@@ -16,6 +16,9 @@ import { ServiceError } from '../../services/core/ServiceError';
 import { VOICE_ERROR_CODES, SessionContext } from '../../types/voice';
 import { VoiceBuyInConfirmationDialog } from './VoiceBuyInConfirmationDialog';
 import { VoiceCommandHelp } from './VoiceCommandHelp';
+import { VoiceStatusIndicator } from './VoiceStatusIndicator';
+import { TouchBuyInInterface } from './TouchBuyInInterface';
+import { VoiceErrorBoundary } from '../common/VoiceErrorBoundary';
 
 interface VoiceCommandPanelProps {
   onVoiceCommand?: (text: string, confidence: number) => void;
@@ -36,6 +39,8 @@ export const VoiceCommandPanel: React.FC<VoiceCommandPanelProps> = ({
     parsedCommand,
     showConfirmationDialog,
     isProcessingBuyIn,
+    inputMode,
+    voiceAvailable,
     setState,
     setError,
     setCapabilities,
@@ -44,6 +49,8 @@ export const VoiceCommandPanel: React.FC<VoiceCommandPanelProps> = ({
     setParsedCommand,
     setShowConfirmationDialog,
     setIsProcessingBuyIn,
+    setInputMode,
+    setVoiceAvailable,
   } = useVoiceStore();
 
   const [isInitialized, setIsInitialized] = useState(false);
@@ -54,16 +61,20 @@ export const VoiceCommandPanel: React.FC<VoiceCommandPanelProps> = ({
       setState('idle');
       setError(null);
       
+      // Story 2.6A: Use startup capability detection
+      const isVoiceReady = await VoiceService.checkStartupCapabilities();
       const caps = await VoiceService.checkCapabilities();
       setCapabilities(caps);
+      setVoiceAvailable(isVoiceReady);
       
-      if (!caps.available) {
-        setError('Voice recognition is not available on this device');
-        return;
-      }
-      
-      if (!caps.permissionGranted) {
-        setError('Microphone permission required for voice commands');
+      // If voice is not available, automatically switch to manual mode
+      if (!isVoiceReady) {
+        setInputMode('manual');
+        if (!caps.available) {
+          setError('Voice recognition is not available on this device');
+        } else if (!caps.permissionGranted) {
+          setError('Microphone permission required for voice commands');
+        }
         return;
       }
       
@@ -174,7 +185,7 @@ export const VoiceCommandPanel: React.FC<VoiceCommandPanelProps> = ({
         setError('Failed to initialize voice recognition');
       }
     }
-  }, [setState, setError, setCapabilities, stopListening, onVoiceCommand, sessionId, setParsedCommand, setShowConfirmationDialog, setIsProcessingBuyIn]);
+  }, [setState, setError, setCapabilities, setVoiceAvailable, setInputMode, stopListening, onVoiceCommand, sessionId, setParsedCommand, setShowConfirmationDialog, setIsProcessingBuyIn]);
 
   const processBuyIn = useCallback(async (playerId: string, playerName: string, amount: number) => {
     try {
@@ -226,6 +237,38 @@ export const VoiceCommandPanel: React.FC<VoiceCommandPanelProps> = ({
     setParsedCommand(null);
   }, [setShowConfirmationDialog, setParsedCommand]);
 
+  const handleStopListening = useCallback(async (): Promise<void> => {
+    try {
+      await VoiceService.stopListening();
+      stopListening();
+    } catch (err) {
+      console.error('Failed to stop voice recognition:', err);
+      stopListening(); // Force stop in store even if service fails
+    }
+  }, [stopListening]);
+
+  /**
+   * Story 2.6A: Handle manual mode toggle
+   */
+  const handleModeToggle = useCallback(async () => {
+    if (!voiceAvailable) {
+      // Cannot switch to voice mode if voice is unavailable
+      Alert.alert(
+        'Voice Unavailable', 
+        'Voice recognition is not available. Manual mode only.'
+      );
+      return;
+    }
+    
+    const newMode = inputMode === 'voice' ? 'manual' : 'voice';
+    setInputMode(newMode);
+    
+    // Stop listening if switching to manual mode
+    if (newMode === 'manual' && isListening) {
+      await handleStopListening();
+    }
+  }, [voiceAvailable, inputMode, isListening, setInputMode, handleStopListening]);
+
   useEffect(() => {
     initializeVoiceService();
     
@@ -238,6 +281,15 @@ export const VoiceCommandPanel: React.FC<VoiceCommandPanelProps> = ({
   }, [initializeVoiceService, isListening]);
 
   const handleVoiceButtonPress = async (): Promise<void> => {
+    // Only allow voice commands in voice mode
+    if (inputMode === 'manual') {
+      Alert.alert(
+        'Manual Mode Active', 
+        'Switch to Voice Mode to use voice commands.'
+      );
+      return;
+    }
+
     if (!isInitialized) {
       Alert.alert(
         'Voice Recognition Unavailable', 
@@ -282,18 +334,12 @@ export const VoiceCommandPanel: React.FC<VoiceCommandPanelProps> = ({
     }
   };
 
-  const handleStopListening = async (): Promise<void> => {
-    try {
-      await VoiceService.stopListening();
-      stopListening();
-    } catch (err) {
-      console.error('Failed to stop voice recognition:', err);
-      stopListening(); // Force stop in store even if service fails
-    }
-  };
-
   const getButtonStyle = () => {
-    if (disabled || !capabilities?.available) {
+    if (disabled || inputMode === 'manual') {
+      return [styles.voiceButton, styles.voiceButtonDisabled];
+    }
+    
+    if (!capabilities?.available) {
       return [styles.voiceButton, styles.voiceButtonDisabled];
     }
     
@@ -309,6 +355,10 @@ export const VoiceCommandPanel: React.FC<VoiceCommandPanelProps> = ({
   };
 
   const getButtonText = (): string => {
+    if (inputMode === 'manual') {
+      return 'Manual Mode';
+    }
+    
     if (!capabilities?.available) {
       return 'Voice Unavailable';
     }
@@ -347,60 +397,105 @@ export const VoiceCommandPanel: React.FC<VoiceCommandPanelProps> = ({
 
   return (
     <View style={styles.container}>
-      <View style={styles.buttonRow}>
+      {/* Story 2.6A: Voice status indicator and mode toggle */}
+      <View style={styles.statusRow}>
+        <VoiceErrorBoundary>
+          <VoiceStatusIndicator size="medium" showLabel={true} />
+        </VoiceErrorBoundary>
+        
         <TouchableOpacity
-          style={getButtonStyle()}
-          onPress={handleVoiceButtonPress}
-          onLongPress={showErrorMessage}
-          disabled={disabled || !capabilities?.available || isProcessingBuyIn}
+          style={[
+            styles.toggleButton, 
+            inputMode === 'voice' ? styles.toggleButtonVoice : styles.toggleButtonManual
+          ]}
+          onPress={handleModeToggle}
+          disabled={disabled}
           activeOpacity={0.7}
         >
-          <View style={styles.buttonContent}>
-            {(isListening || isProcessingBuyIn) && (
-              <ActivityIndicator 
-                size="small" 
-                color="#FFFFFF" 
-                style={styles.loadingIndicator} 
-              />
-            )}
-            <Text style={styles.buttonText}>{getButtonText()}</Text>
-          </View>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.helpButton}
-          onPress={() => setShowHelp(true)}
-          activeOpacity={0.7}
-        >
-          <Text style={styles.helpButtonText}>?</Text>
+          <Text style={styles.toggleButtonText}>
+            {inputMode === 'voice' ? 'Switch to Manual' : 'Switch to Voice'}
+          </Text>
         </TouchableOpacity>
       </View>
+
+      {/* Voice Command Section - only show in voice mode */}
+      {inputMode === 'voice' && (
+        <VoiceErrorBoundary>
+          <View style={styles.buttonRow}>
+            <TouchableOpacity
+              style={getButtonStyle()}
+              onPress={handleVoiceButtonPress}
+              onLongPress={showErrorMessage}
+              disabled={disabled || !capabilities?.available || isProcessingBuyIn}
+              activeOpacity={0.7}
+            >
+              <View style={styles.buttonContent}>
+                {(isListening || isProcessingBuyIn) && (
+                  <ActivityIndicator 
+                    size="small" 
+                    color="#FFFFFF" 
+                    style={styles.loadingIndicator} 
+                  />
+                )}
+                <Text style={styles.buttonText}>{getButtonText()}</Text>
+              </View>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.helpButton}
+              onPress={() => setShowHelp(true)}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.helpButtonText}>?</Text>
+            </TouchableOpacity>
+          </View>
+        </VoiceErrorBoundary>
+      )}
+
+      {/* Manual Touch Interface - only show in manual mode */}
+      {inputMode === 'manual' && sessionId && (
+        <View style={styles.manualInterfaceContainer}>
+          <TouchBuyInInterface 
+            sessionId={sessionId} 
+            disabled={disabled}
+          />
+        </View>
+      )}
       
-      {renderAudioLevelIndicator()}
+      {/* Audio level indicator - only show in voice mode when listening */}
+      {inputMode === 'voice' && (
+        <VoiceErrorBoundary>
+          {renderAudioLevelIndicator()}
+        </VoiceErrorBoundary>
+      )}
       
+      {/* Error messages */}
       {error && (
         <Text style={styles.errorText} numberOfLines={2}>
           {error}
         </Text>
       )}
       
-      {!capabilities?.available && (
+      {/* Voice capability hints */}
+      {inputMode === 'voice' && !capabilities?.available && (
         <Text style={styles.hintText}>
           Voice commands require microphone access
         </Text>
       )}
 
-      <VoiceBuyInConfirmationDialog
-        visible={showConfirmationDialog}
-        parsedCommand={parsedCommand}
-        onConfirm={handleConfirmBuyIn}
-        onCancel={handleCancelBuyIn}
-      />
+      <VoiceErrorBoundary>
+        <VoiceBuyInConfirmationDialog
+          visible={showConfirmationDialog}
+          parsedCommand={parsedCommand}
+          onConfirm={handleConfirmBuyIn}
+          onCancel={handleCancelBuyIn}
+        />
 
-      <VoiceCommandHelp
-        visible={showHelp}
-        onClose={() => setShowHelp(false)}
-      />
+        <VoiceCommandHelp
+          visible={showHelp}
+          onClose={() => setShowHelp(false)}
+        />
+      </VoiceErrorBoundary>
     </View>
   );
 };
@@ -410,10 +505,42 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginVertical: 8,
   },
+  statusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    width: '100%',
+    marginBottom: 12,
+    paddingHorizontal: 16,
+  },
   buttonRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
+  },
+  toggleButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#DDD',
+  },
+  toggleButtonVoice: {
+    backgroundColor: '#4CAF50',
+    borderColor: '#4CAF50',
+  },
+  toggleButtonManual: {
+    backgroundColor: '#FF9800',
+    borderColor: '#FF9800',
+  },
+  toggleButtonText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  manualInterfaceContainer: {
+    width: '100%',
+    marginTop: 16,
   },
   voiceButton: {
     backgroundColor: '#4CAF50',

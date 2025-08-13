@@ -29,7 +29,7 @@ module.exports = {
   
   // Transform ignore patterns
   transformIgnorePatterns: [
-    'node_modules/(?!(react-native|@react-native|react-native-sqlite-storage)/)',
+    'node_modules/(?!(react-native|@react-native|react-native-sqlite-storage|react-native-gesture-handler|@react-native-voice)/)',
   ],
   
   // Setup files

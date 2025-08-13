@@ -57,8 +57,14 @@ describe('VoiceService', () => {
     jest.clearAllTimers();
     jest.useFakeTimers();
     
-    // Reset singleton instance
+    // Reset singleton instance state
     (VoiceServiceClass as any).instance = undefined;
+    
+    // Get fresh instance and reset state
+    const service = VoiceService;
+    if (service.reset) {
+      service.reset();
+    }
   });
 
   afterEach(() => {
