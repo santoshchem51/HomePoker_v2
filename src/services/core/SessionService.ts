@@ -389,4 +389,97 @@ export class SessionService {
       throw new ServiceError('SESSION_COMPLETE_FAILED', `Failed to complete session: ${error}`);
     }
   }
+
+  /**
+   * Add a player from a saved profile
+   * Story 2.5: AC 4, 5 - Profile-based player addition
+   */
+  public async addPlayerFromProfile(sessionId: string, profileId: string): Promise<Player> {
+    try {
+      if (!sessionId || !profileId) {
+        throw new ServiceError('VALIDATION_ERROR', 'Session ID and Profile ID are required');
+      }
+
+      // Get profile data
+      const ProfileServiceModule = require('./ProfileService');
+      const profileService = ProfileServiceModule.ProfileService.getInstance();
+      const profile = await profileService.getProfile(profileId);
+      
+      if (!profile) {
+        throw new ServiceError('PROFILE_NOT_FOUND', `Profile ${profileId} not found`);
+      }
+
+      // Create player data from profile
+      const playerData: PlayerData = {
+        name: profile.name,
+        isGuest: false,
+        profileId: profile.id
+      };
+
+      // Use existing addPlayer method but with profile data
+      const player = await this.addPlayer(sessionId, playerData);
+
+      // Mark profile as recently used
+      await profileService.markProfileAsUsed(profileId);
+
+      return player;
+    } catch (error) {
+      if (error instanceof ServiceError) {
+        throw error;
+      }
+      throw new ServiceError('PROFILE_PLAYER_ADDITION_FAILED', `Failed to add player from profile: ${error}`);
+    }
+  }
+
+  /**
+   * Add a guest player (one-time participant)
+   * Story 2.5: AC 5 - Guest player quick-add functionality
+   */
+  public async addGuestPlayer(sessionId: string, guestName: string): Promise<Player> {
+    try {
+      if (!sessionId || !guestName?.trim()) {
+        throw new ServiceError('VALIDATION_ERROR', 'Session ID and guest name are required');
+      }
+
+      // Create guest player data
+      const playerData: PlayerData = {
+        name: guestName.trim(),
+        isGuest: true
+      };
+
+      // Use existing addPlayer method with guest flag
+      return await this.addPlayer(sessionId, playerData);
+    } catch (error) {
+      if (error instanceof ServiceError) {
+        throw error;
+      }
+      throw new ServiceError('GUEST_PLAYER_ADDITION_FAILED', `Failed to add guest player: ${error}`);
+    }
+  }
+
+  /**
+   * Get players grouped by type (profile vs guest)
+   * Story 2.5: AC 5 - Simple flow distinction between guest and saved players
+   */
+  public async getPlayersGroupedByType(sessionId: string): Promise<{
+    profilePlayers: Player[];
+    guestPlayers: Player[];
+  }> {
+    try {
+      const players = await this.dbService.getPlayers(sessionId);
+      
+      const profilePlayers = players.filter(p => !p.isGuest && p.profileId);
+      const guestPlayers = players.filter(p => p.isGuest);
+
+      return {
+        profilePlayers,
+        guestPlayers
+      };
+    } catch (error) {
+      if (error instanceof ServiceError) {
+        throw error;
+      }
+      throw new ServiceError('PLAYER_GROUPING_FAILED', `Failed to group players by type: ${error}`);
+    }
+  }
 }
