@@ -165,14 +165,38 @@ When working on stories, follow the established task breakdown patterns and ensu
 3. **Android build failures**: Ensure JAVA_HOME is set to OpenJDK 17
 4. **Voice service errors**: Voice is optional, app should work without it
 
+### WSL Environment Limitations
+
+**KNOWN ISSUE**: Jest tests and some build processes experience significant performance degradation in WSL (Windows Subsystem for Linux) due to subprocess spawning overhead.
+
+**Symptoms:**
+- Jest test suite hangs after 2+ minutes
+- ESLint may timeout with ETIMEDOUT errors
+- Android builds are significantly slower
+- Full `npm run dev-check` command times out
+
+**Validated Workarounds:**
+- Use `node validation-script.js` for immediate development feedback
+- TypeScript (`npm run typecheck`) works reliably and catches most issues
+- Individual lint files work better than full project linting
+- Core tests (`npm run test:core`) may work with `--forceExit --maxWorkers=1`
+
+**Recommended Solutions:**
+- Run full test suite in native Linux environment or Docker
+- Use VS Code dev containers for consistent testing environment
+- Focus on TypeScript validation for immediate feedback during development
+- CI/CD pipeline should run in Linux environment for reliable testing
+
 ### Test Debugging
 - Tests use comprehensive mocking to avoid external dependencies  
 - Database tests use isolated instances to prevent conflicts
 - Voice and external service mocks prevent network-related test failures
 - Use `npm run test:services` for targeted service testing
+- **WSL users**: Use `validation-script.js` for alternative validation
 
 ### Performance Optimization
-- Use `npm run test:fast` for optimized test execution
+- Use `npm run test:fast` for optimized test execution (may still timeout in WSL)
 - Database uses WAL mode and proper indexing
 - Zustand stores optimized with selectors
 - React Native performance follows best practices
+- **WSL optimization**: Jest config uses `maxWorkers: 1`, `cache: false`, `forceExit: true`
