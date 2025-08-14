@@ -14,6 +14,9 @@ import {
   PlayerSettlement,
   Settlement,
   SessionExport,
+  ChatHistory,
+  SharingPreferences,
+  SharingStatus,
   WHATSAPP_URL_SCHEME,
   WHATSAPP_MESSAGE_LIMIT
 } from '../../types/whatsapp';
@@ -25,9 +28,12 @@ import { CalculationUtils } from '../../utils/calculations';
 export class WhatsAppService {
   private static instance: WhatsAppService | null = null;
   private dbService: DatabaseService;
+  private sharingPreferences: SharingPreferences;
+  private sharingHistory: SharingStatus[] = [];
 
   private constructor() {
     this.dbService = DatabaseService.getInstance();
+    this.sharingPreferences = this.loadSharingPreferences();
   }
 
   /**
@@ -666,6 +672,329 @@ export class WhatsAppService {
         'Failed to generate settlement image',
         { sessionId, error: error instanceof Error ? error.message : String(error) }
       );
+    }
+  }
+
+  /**
+   * Quick share functionality - Story 4.4 AC 1, 3
+   * Optimized one-tap sharing with performance monitoring
+   */
+  public async quickShare(
+    sessionId: string, 
+    format: MessageFormat = 'summary'
+  ): Promise<ShareResult> {
+    const startTime = Date.now();
+    
+    try {
+      // Generate message quickly using cached data if available
+      const message = await this.generateSessionMessage(sessionId, format);
+      
+      // Check performance requirement
+      const generationTime = Date.now() - startTime;
+      if (generationTime > 2000) {
+        console.warn(`Message generation took ${generationTime}ms - optimizing needed`);
+      }
+
+      // Direct WhatsApp share without additional prompts
+      const shareResult = await this.shareToWhatsApp(message.content);
+      
+      // Verify total operation time
+      const totalTime = Date.now() - startTime;
+      if (totalTime > 5000) {
+        console.warn(`Quick share exceeded 5s target: ${totalTime}ms`);
+      }
+
+      return {
+        ...shareResult,
+        message: `Quick share completed in ${totalTime}ms`,
+        performanceMetrics: {
+          generationTime,
+          totalTime,
+          targetMet: totalTime <= 5000
+        }
+      };
+    } catch (error) {
+      const totalTime = Date.now() - startTime;
+      
+      if (error instanceof ServiceError) {
+        throw error;
+      }
+      throw new ServiceError(
+        'QUICK_SHARE_FAILED',
+        'Quick share operation failed',
+        { 
+          sessionId, 
+          format, 
+          totalTime,
+          error: error instanceof Error ? error.message : String(error) 
+        }
+      );
+    }
+  }
+
+  /**
+   * Enhanced share with retry mechanism - Story 4.4 AC 6
+   * Implements automatic retry with exponential backoff
+   */
+  public async shareWithRetry(
+    content: string,
+    maxRetries: number = 3,
+    baseDelay: number = 1000
+  ): Promise<ShareResult> {
+    let lastError: Error | undefined;
+    
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        return await this.shareToWhatsApp(content);
+      } catch (error) {
+        lastError = error instanceof Error ? error : new Error(String(error));
+        
+        if (attempt === maxRetries) {
+          // Final attempt failed, use fallback
+          return await this.fallbackToClipboard(content);
+        }
+        
+        // Wait with exponential backoff
+        const delay = baseDelay * Math.pow(2, attempt - 1);
+        await new Promise<void>(resolve => setTimeout(resolve, delay));
+      }
+    }
+    
+    // This should never be reached, but TypeScript requires it
+    throw new ServiceError(
+      'SHARE_RETRY_EXHAUSTED',
+      'All retry attempts failed',
+      { maxRetries, lastError: lastError?.message }
+    );
+  }
+
+  /**
+   * Load sharing preferences - Story 4.4 AC 2
+   * Initialize with default preferences if none exist
+   */
+  private loadSharingPreferences(): SharingPreferences {
+    try {
+      // In a real implementation, this would load from AsyncStorage or similar
+      // For now, return default preferences
+      return {
+        defaultFormat: 'summary',
+        recentChats: [],
+        quickShareEnabled: true
+      };
+    } catch (error) {
+      // Return defaults if loading fails
+      return {
+        defaultFormat: 'summary' as MessageFormat,
+        recentChats: [],
+        quickShareEnabled: true
+      };
+    }
+  }
+
+  /**
+   * Update recent chat history - Story 4.4 AC 2
+   * Privacy-conscious storage without sensitive data
+   */
+  public updateChatHistory(chatName: string): void {
+    try {
+      const chatId = this.generateChatId(chatName);
+      const existingIndex = this.sharingPreferences.recentChats.findIndex(
+        chat => chat.id === chatId
+      );
+
+      if (existingIndex >= 0) {
+        // Update existing chat
+        const existingChat = this.sharingPreferences.recentChats[existingIndex];
+        existingChat.lastUsed = new Date();
+        existingChat.useCount += 1;
+        
+        // Move to front
+        this.sharingPreferences.recentChats.splice(existingIndex, 1);
+        this.sharingPreferences.recentChats.unshift(existingChat);
+      } else {
+        // Add new chat
+        const newChat: ChatHistory = {
+          id: chatId,
+          displayName: chatName,
+          lastUsed: new Date(),
+          useCount: 1
+        };
+        
+        this.sharingPreferences.recentChats.unshift(newChat);
+      }
+
+      // Keep only top 5 recent chats
+      this.sharingPreferences.recentChats = this.sharingPreferences.recentChats.slice(0, 5);
+      
+      // Save preferences (in real implementation, would persist to storage)
+      this.saveSharingPreferences();
+    } catch (error) {
+      console.warn('Failed to update chat history:', error);
+    }
+  }
+
+  /**
+   * Get recent chat history - Story 4.4 AC 2
+   */
+  public getRecentChats(): ChatHistory[] {
+    return this.sharingPreferences.recentChats.slice();
+  }
+
+  /**
+   * Generate privacy-safe chat ID
+   */
+  private generateChatId(chatName: string): string {
+    // Simple hash for privacy - in real implementation, use proper hashing
+    // Using a simple string hash since btoa is not available in React Native
+    let hash = 0;
+    for (let i = 0; i < chatName.length; i++) {
+      const char = chatName.charCodeAt(i);
+      // eslint-disable-next-line no-bitwise
+      hash = ((hash << 5) - hash) + char;
+      // eslint-disable-next-line no-bitwise
+      hash = hash & hash; // Convert to 32-bit integer
+    }
+    return Math.abs(hash).toString(36).slice(0, 8);
+  }
+
+  /**
+   * Save sharing preferences (placeholder for real persistence)
+   */
+  private saveSharingPreferences(): void {
+    // In real implementation, would save to AsyncStorage
+    // For now, just keep in memory
+  }
+
+  /**
+   * Quick share to recent chat - Story 4.4 AC 1, 2
+   */
+  public async quickShareToRecent(
+    sessionId: string,
+    chatId?: string,
+    format: MessageFormat = 'summary'
+  ): Promise<ShareResult> {
+    try {
+      const result = await this.quickShare(sessionId, format);
+      
+      // Update chat history if specific chat was used
+      if (chatId) {
+        const chat = this.sharingPreferences.recentChats.find(c => c.id === chatId);
+        if (chat) {
+          this.updateChatHistory(chat.displayName);
+        }
+      }
+      
+      return result;
+    } catch (error) {
+      if (error instanceof ServiceError) {
+        throw error;
+      }
+      throw new ServiceError(
+        'QUICK_SHARE_TO_RECENT_FAILED',
+        'Quick share to recent chat failed',
+        { sessionId, chatId, format, error: error instanceof Error ? error.message : String(error) }
+      );
+    }
+  }
+
+  /**
+   * Create sharing status record - Story 4.4 AC 5
+   */
+  private createSharingStatus(
+    sessionId: string,
+    format: MessageFormat,
+    status: SharingStatus['status'] = 'pending'
+  ): SharingStatus {
+    const sharingStatus: SharingStatus = {
+      id: Date.now().toString(),
+      sessionId,
+      status,
+      timestamp: new Date(),
+      method: 'whatsapp',
+      format
+    };
+    
+    this.sharingHistory.unshift(sharingStatus);
+    // Keep only last 10 sharing records
+    this.sharingHistory = this.sharingHistory.slice(0, 10);
+    
+    return sharingStatus;
+  }
+
+  /**
+   * Update sharing status - Story 4.4 AC 5
+   */
+  private updateSharingStatus(
+    statusId: string,
+    updates: Partial<SharingStatus>
+  ): void {
+    const status = this.sharingHistory.find(s => s.id === statusId);
+    if (status) {
+      Object.assign(status, updates);
+    }
+  }
+
+  /**
+   * Get sharing history - Story 4.4 AC 5
+   */
+  public getSharingHistory(): SharingStatus[] {
+    return this.sharingHistory.slice();
+  }
+
+  /**
+   * Enhanced quick share with status tracking - Story 4.4 AC 5
+   */
+  public async quickShareWithStatus(
+    sessionId: string,
+    format: MessageFormat = 'summary'
+  ): Promise<{ result: ShareResult; statusId: string }> {
+    const sharingStatus = this.createSharingStatus(sessionId, format);
+    
+    try {
+      const result = await this.quickShare(sessionId, format);
+      
+      this.updateSharingStatus(sharingStatus.id, {
+        status: 'success',
+        method: result.method
+      });
+      
+      return { result, statusId: sharingStatus.id };
+    } catch (error) {
+      this.updateSharingStatus(sharingStatus.id, {
+        status: 'failed',
+        error: error instanceof Error ? error.message : String(error)
+      });
+      
+      throw error;
+    }
+  }
+
+  /**
+   * Get user-friendly sharing confirmation message - Story 4.4 AC 5
+   */
+  public getSharingConfirmationMessage(statusId: string): string {
+    const status = this.sharingHistory.find(s => s.id === statusId);
+    if (!status) {
+      return 'Sharing status not found';
+    }
+
+    switch (status.status) {
+      case 'success':
+        if (status.method === 'whatsapp') {
+          return '✅ Successfully shared to WhatsApp!';
+        } else if (status.method === 'clipboard') {
+          return '📋 Copied to clipboard as backup';
+        }
+        return '✅ Successfully shared!';
+      
+      case 'failed':
+        return '❌ Sharing failed. Try again or copy to clipboard.';
+      
+      case 'fallback':
+        return '📋 WhatsApp unavailable - copied to clipboard instead';
+      
+      default:
+        return '⏳ Sharing in progress...';
     }
   }
 }

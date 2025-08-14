@@ -10,6 +10,11 @@ export interface ShareResult {
   method: 'whatsapp' | 'clipboard' | 'other';
   error?: string;
   message?: string;
+  performanceMetrics?: {
+    generationTime: number;
+    totalTime: number;
+    targetMet: boolean;
+  };
 }
 
 export interface WhatsAppMessage {
@@ -77,6 +82,29 @@ export interface SessionExport {
     timestamp: Date;
   }>;
   settlements: Settlement[];
+}
+
+export interface ChatHistory {
+  id: string;
+  displayName: string;
+  lastUsed: Date;
+  useCount: number;
+}
+
+export interface SharingPreferences {
+  defaultFormat: MessageFormat;
+  recentChats: ChatHistory[];
+  quickShareEnabled: boolean;
+}
+
+export interface SharingStatus {
+  id: string;
+  sessionId: string;
+  status: 'pending' | 'success' | 'failed' | 'fallback';
+  timestamp: Date;
+  method: 'whatsapp' | 'clipboard' | 'other';
+  format: MessageFormat;
+  error?: string;
 }
 
 // WhatsApp URL scheme constants
