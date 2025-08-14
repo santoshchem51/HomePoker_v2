@@ -12,6 +12,216 @@ export interface QueryResult {
   insertId?: number;
 }
 
+export interface DatabaseConfig {
+  temp_store: 'DEFAULT' | 'FILE' | 'MEMORY';
+  mmap_size: number;
+  cache_size: number;
+  auto_vacuum: 'NONE' | 'FULL' | 'INCREMENTAL';
+  optimize_frequency: number; // in milliseconds
+}
+
+export interface PreparedStatement {
+  sql: string;
+  params: any[];
+  cacheKey: string;
+}
+
+export interface CachedStatement {
+  sql: string;
+  parameterCount: number;
+  compiledStatement?: any;
+  usageCount: number;
+  lastUsed: Date;
+  createdAt: Date;
+}
+
+export interface PreparedStatementStats {
+  totalCached: number;
+  cacheHits: number;
+  cacheMisses: number;
+  hitRate: number;
+  memoryUsageKB: number;
+}
+
+export interface ConnectionPoolStats {
+  totalConnections: number;
+  activeConnections: number;
+  idleConnections: number;
+  preparedStatements: number;
+}
+
+export interface QueryAnalysis {
+  sql: string;
+  executionPlan: Array<{
+    id: number;
+    parent: number;
+    notused: number;
+    detail: string;
+  }>;
+  estimatedCost: number;
+  indexesUsed: string[];
+  recommendations: string[];
+  executionTimeMs?: number;
+}
+
+export interface SlowQueryLog {
+  sql: string;
+  params: any[];
+  executionTimeMs: number;
+  timestamp: Date;
+  stackTrace?: string;
+}
+
+export interface DatabaseMetrics {
+  totalQueries: number;
+  averageQueryTimeMs: number;
+  slowQueries: number;
+  errorRate: number;
+  memoryUsageMB: number;
+  cacheHitRate: number;
+  connectionCount: number;
+  lastUpdated: Date;
+}
+
+export interface PerformanceResult<T> {
+  result: T;
+  executionTimeMs: number;
+  memoryUsedMB?: number;
+  cacheHits?: number;
+  cacheMisses?: number;
+}
+
+class PreparedStatementCache {
+  private cache = new Map<string, CachedStatement>();
+  private maxCacheSize = 100;
+  private maxAge = 3600000; // 1 hour
+  private maxMemoryUsageKB = 1024; // 1MB memory limit
+  private stats = {
+    hits: 0,
+    misses: 0,
+  };
+
+  private generateCacheKey(sql: string): string {
+    // Normalize SQL by removing extra whitespace and converting to lowercase
+    const normalizedSql = sql.trim().replace(/\s+/g, ' ').toLowerCase();
+    return `stmt_${this.hashString(normalizedSql)}`;
+  }
+
+  private hashString(str: string): string {
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) {
+      const char = str.charCodeAt(i);
+      hash = ((hash << 5) - hash) + char;
+      hash = hash & hash; // Convert to 32-bit integer
+    }
+    return Math.abs(hash).toString(36);
+  }
+
+  public get(sql: string): CachedStatement | null {
+    const key = this.generateCacheKey(sql);
+    const cached = this.cache.get(key);
+    
+    if (!cached) {
+      this.stats.misses++;
+      return null;
+    }
+
+    // Check if cache entry is expired
+    if (Date.now() - cached.lastUsed.getTime() > this.maxAge) {
+      this.cache.delete(key);
+      this.stats.misses++;
+      return null;
+    }
+
+    // Update usage statistics
+    cached.usageCount++;
+    cached.lastUsed = new Date();
+    this.stats.hits++;
+    
+    return cached;
+  }
+
+  public set(sql: string, parameterCount: number): CachedStatement {
+    const key = this.generateCacheKey(sql);
+    
+    // Evict oldest entries if cache is full
+    if (this.cache.size >= this.maxCacheSize) {
+      this.evictOldestEntries();
+    }
+
+    const cached: CachedStatement = {
+      sql: sql.trim(),
+      parameterCount,
+      usageCount: 1,
+      lastUsed: new Date(),
+      createdAt: new Date(),
+    };
+
+    this.cache.set(key, cached);
+    return cached;
+  }
+
+  private evictOldestEntries(): void {
+    // Check memory usage first
+    const currentMemoryKB = this.cache.size * 0.5;
+    
+    if (currentMemoryKB > this.maxMemoryUsageKB) {
+      // Aggressive eviction for memory pressure
+      const entries = Array.from(this.cache.entries())
+        .sort((a, b) => {
+          // Prefer removing older, less frequently used entries
+          const ageScore = a[1].lastUsed.getTime() - b[1].lastUsed.getTime();
+          const usageScore = a[1].usageCount - b[1].usageCount;
+          return ageScore + (usageScore * 1000); // Weight usage more heavily
+        });
+      
+      const toRemove = Math.max(1, Math.floor(entries.length * 0.4)); // More aggressive
+      
+      for (let i = 0; i < toRemove; i++) {
+        this.cache.delete(entries[i][0]);
+      }
+    } else {
+      // Standard eviction by age
+      const entries = Array.from(this.cache.entries())
+        .sort((a, b) => a[1].lastUsed.getTime() - b[1].lastUsed.getTime());
+      
+      const toRemove = Math.max(1, Math.floor(entries.length * 0.2));
+      
+      for (let i = 0; i < toRemove; i++) {
+        this.cache.delete(entries[i][0]);
+      }
+    }
+  }
+
+  public clear(): void {
+    this.cache.clear();
+    this.stats = { hits: 0, misses: 0 };
+  }
+
+  public getStats(): PreparedStatementStats {
+    const total = this.stats.hits + this.stats.misses;
+    const hitRate = total > 0 ? (this.stats.hits / total) * 100 : 0;
+    
+    // Estimate memory usage (rough calculation)
+    const memoryUsageKB = this.cache.size * 0.5; // ~0.5KB per cached statement
+    
+    return {
+      totalCached: this.cache.size,
+      cacheHits: this.stats.hits,
+      cacheMisses: this.stats.misses,
+      hitRate,
+      memoryUsageKB,
+    };
+  }
+
+  public getFrequentlyUsedStatements(limit: number = 10): Array<{ sql: string; usageCount: number }> {
+    return Array.from(this.cache.values())
+      .sort((a, b) => b.usageCount - a.usageCount)
+      .slice(0, limit)
+      .map(stmt => ({ sql: stmt.sql, usageCount: stmt.usageCount }));
+  }
+}
+
 export interface Session {
   id: string;
   name: string;
@@ -68,6 +278,43 @@ export class DatabaseService {
   private database: SQLiteDatabase | null = null;
   private isInitializing = false;
   private initPromise: Promise<void> | null = null;
+  
+  // Connection pooling and caching
+  private preparedStatements: Map<string, any> = new Map();
+  private statementCache: PreparedStatementCache = new PreparedStatementCache();
+  private config: DatabaseConfig = {
+    temp_store: 'MEMORY',
+    mmap_size: 268435456, // 256MB
+    cache_size: -20000, // 20MB cache (negative = KB)
+    auto_vacuum: 'INCREMENTAL',
+    optimize_frequency: 3600000, // 1 hour
+  };
+  private optimizeTimer: ReturnType<typeof setTimeout> | null = null;
+  
+  // Query analysis and monitoring
+  private slowQueryThreshold: number = 100; // 100ms threshold
+  private slowQueryLog: SlowQueryLog[] = [];
+  private queryLoggingEnabled: boolean = false;
+  private maxSlowQueryLogSize: number = 1000;
+  
+  // Performance metrics tracking
+  private performanceMetrics: {
+    totalQueries: number;
+    totalExecutionTime: number;
+    slowQueries: number;
+    totalErrors: number;
+    cacheHits: number;
+    cacheMisses: number;
+    startTime: Date;
+  } = {
+    totalQueries: 0,
+    totalExecutionTime: 0,
+    slowQueries: 0,
+    totalErrors: 0,
+    cacheHits: 0,
+    cacheMisses: 0,
+    startTime: new Date(),
+  };
 
   private constructor() {
     SQLite.DEBUG(false);
@@ -152,16 +399,51 @@ export class DatabaseService {
       throw new ServiceError('DATABASE_NOT_INITIALIZED', 'Database not initialized');
     }
 
+    // Enhanced PRAGMA configuration for performance
     const pragmas = [
       'PRAGMA journal_mode=WAL',
       'PRAGMA synchronous=NORMAL',
-      'PRAGMA cache_size=10000',
+      `PRAGMA cache_size=${this.config.cache_size}`,
       'PRAGMA foreign_keys=ON',
+      `PRAGMA temp_store=${this.config.temp_store}`,
+      `PRAGMA mmap_size=${this.config.mmap_size}`,
+      `PRAGMA auto_vacuum=${this.config.auto_vacuum}`,
+      'PRAGMA busy_timeout=30000', // 30 second timeout
+      'PRAGMA wal_autocheckpoint=1000',
+      'PRAGMA optimize',
     ];
 
     for (const pragma of pragmas) {
-      await this.database.executeSql(pragma);
+      try {
+        await this.database.executeSql(pragma);
+      } catch (error) {
+        console.warn(`Failed to set pragma: ${pragma}`, error);
+        // Continue with other pragmas even if one fails
+      }
     }
+
+    // Start automatic optimization timer
+    this.startOptimizationTimer();
+  }
+
+  private startOptimizationTimer(): void {
+    if (this.optimizeTimer) {
+      clearTimeout(this.optimizeTimer);
+    }
+    
+    this.optimizeTimer = setTimeout(async () => {
+      try {
+        if (this.database) {
+          await this.database.executeSql('PRAGMA optimize');
+          console.log('Database optimization completed');
+        }
+      } catch (error) {
+        console.warn('Database optimization failed:', error);
+      }
+      
+      // Schedule next optimization
+      this.startOptimizationTimer();
+    }, this.config.optimize_frequency);
   }
 
   public async executeQuery(
@@ -176,10 +458,22 @@ export class DatabaseService {
       throw new ServiceError('DATABASE_NOT_INITIALIZED', 'Database not initialized');
     }
 
+    const startTime = Date.now();
+    
     try {
       const [result] = await this.database.executeSql(query, params);
+      const executionTimeMs = Date.now() - startTime;
+      
+      // Update performance metrics
+      this.updatePerformanceMetrics(executionTimeMs, false);
+      this.logSlowQuery(query, params, executionTimeMs);
+      
       return result as QueryResult;
     } catch (error: any) {
+      const executionTimeMs = Date.now() - startTime;
+      this.updatePerformanceMetrics(executionTimeMs, true);
+      this.logSlowQuery(query, params, executionTimeMs);
+      
       console.error('Query execution failed:', error);
       throw new ServiceError('QUERY_EXECUTION_FAILED', error.message || 'Query execution failed');
     }
@@ -249,6 +543,10 @@ export class DatabaseService {
       {
         version: 1,
         sql: this.getInitialSchemaSql(),
+      },
+      {
+        version: 2,
+        sql: this.getIndexOptimizationSql(),
       },
     ];
   }
@@ -343,12 +641,852 @@ export class DatabaseService {
     `;
   }
 
+  private getIndexOptimizationSql(): string {
+    return `
+      -- Enhanced indexing strategy for query performance optimization
+      
+      -- Sessions table optimization
+      CREATE INDEX IF NOT EXISTS idx_sessions_status_created ON sessions(status, created_at);
+      CREATE INDEX IF NOT EXISTS idx_sessions_organizer_status ON sessions(organizer_id, status);
+      
+      -- Players table optimization
+      CREATE INDEX IF NOT EXISTS idx_players_session_status_joined ON players(session_id, status, joined_at);
+      CREATE INDEX IF NOT EXISTS idx_players_balance_status ON players(current_balance, status);
+      
+      -- Transactions table optimization  
+      CREATE INDEX IF NOT EXISTS idx_transactions_session_player_time ON transactions(session_id, player_id, timestamp DESC);
+      CREATE INDEX IF NOT EXISTS idx_transactions_type_time ON transactions(type, timestamp DESC);
+      CREATE INDEX IF NOT EXISTS idx_transactions_voided_time ON transactions(is_voided, timestamp DESC);
+      
+      -- Player profiles table optimization
+      CREATE INDEX IF NOT EXISTS idx_profiles_last_played_games ON player_profiles(last_played_at DESC, games_played);
+      CREATE INDEX IF NOT EXISTS idx_profiles_name_games ON player_profiles(name, games_played);
+      
+      -- Composite indexes for common query patterns
+      CREATE INDEX IF NOT EXISTS idx_active_players_by_session ON players(session_id, status) WHERE status = 'active';
+      CREATE INDEX IF NOT EXISTS idx_recent_transactions ON transactions(timestamp DESC, is_voided) WHERE is_voided = 0;
+      CREATE INDEX IF NOT EXISTS idx_session_totals ON transactions(session_id, type, amount) WHERE is_voided = 0;
+    `;
+  }
+
   public async close(): Promise<void> {
+    // Clear optimization timer
+    if (this.optimizeTimer) {
+      clearTimeout(this.optimizeTimer);
+      this.optimizeTimer = null;
+    }
+
+    // Clear prepared statements cache
+    this.preparedStatements.clear();
+    this.statementCache.clear();
+
     if (this.database) {
       await this.database.close();
       this.database = null;
     }
   }
+
+  // Configuration management
+  public updateConfig(newConfig: Partial<DatabaseConfig>): void {
+    this.config = { ...this.config, ...newConfig };
+  }
+
+  public getConfig(): DatabaseConfig {
+    return { ...this.config };
+  }
+
+  public async validateConfiguration(): Promise<{
+    valid: boolean;
+    errors: string[];
+  }> {
+    const errors: string[] = [];
+
+    try {
+      if (!this.database) {
+        await this.initialize();
+      }
+
+      // Validate PRAGMA settings
+      const validations = [
+        { pragma: 'PRAGMA journal_mode', expected: 'wal' },
+        { pragma: 'PRAGMA synchronous', expected: '1' }, // NORMAL = 1
+        { pragma: 'PRAGMA foreign_keys', expected: '1' },
+      ];
+
+      for (const { pragma, expected } of validations) {
+        try {
+          const result = await this.executeQuery(pragma);
+          const actual = result.rows.item(0)[pragma.split(' ')[1]];
+          if (actual.toString().toLowerCase() !== expected) {
+            errors.push(`${pragma}: expected ${expected}, got ${actual}`);
+          }
+        } catch (error) {
+          errors.push(`Failed to validate ${pragma}: ${error}`);
+        }
+      }
+
+      // Validate memory constraints
+      const { sizeInBytes } = await this.getDatabaseSize();
+      if (sizeInBytes > 100 * 1024 * 1024) { // 100MB warning
+        errors.push(`Database size (${Math.round(sizeInBytes / 1024 / 1024)}MB) exceeds recommended limit`);
+      }
+
+    } catch (error) {
+      errors.push(`Configuration validation failed: ${error}`);
+    }
+
+    return {
+      valid: errors.length === 0,
+      errors,
+    };
+  }
+
+  // Connection pool statistics
+  public getConnectionPoolStats(): ConnectionPoolStats {
+    return {
+      totalConnections: this.database ? 1 : 0,
+      activeConnections: this.database ? 1 : 0,
+      idleConnections: 0,
+      preparedStatements: this.preparedStatements.size,
+    };
+  }
+
+  public async validateConnectionPool(): Promise<{
+    healthy: boolean;
+    issues: string[];
+    recommendations: string[];
+  }> {
+    const issues: string[] = [];
+    const recommendations: string[] = [];
+
+    try {
+      // Check database connection health
+      const isConnected = await this.isConnected();
+      if (!isConnected) {
+        issues.push('Database connection is not available');
+        recommendations.push('Restart database service or check connection configuration');
+      }
+
+      // Check prepared statement cache health
+      const cacheStats = this.getStatementCacheStats();
+      if (cacheStats.memoryUsageKB > 1024) { // 1MB limit
+        issues.push(`Prepared statement cache using ${cacheStats.memoryUsageKB}KB (>1MB limit)`);
+        recommendations.push('Clear prepared statement cache or reduce cache size');
+      }
+
+      if (cacheStats.hitRate < 50) {
+        issues.push(`Low cache hit rate: ${cacheStats.hitRate.toFixed(1)}%`);
+        recommendations.push('Review query patterns or adjust caching strategy');
+      }
+
+      // Check for connection pool exhaustion indicators
+      const metrics = await this.getDetailedMetrics();
+      if (metrics.errorRate > 10) {
+        issues.push(`High error rate detected: ${metrics.errorRate.toFixed(2)}%`);
+        recommendations.push('Investigate query failures and connection stability');
+      }
+
+      return {
+        healthy: issues.length === 0,
+        issues,
+        recommendations,
+      };
+    } catch (error) {
+      return {
+        healthy: false,
+        issues: ['Connection pool validation failed'],
+        recommendations: ['Check database service health and connectivity'],
+      };
+    }
+  }
+
+  // Index management and validation
+  public async validateIndexes(): Promise<{
+    valid: boolean;
+    indexes: Array<{ name: string; table: string; columns: string; exists: boolean }>;
+    missing: string[];
+  }> {
+    try {
+      const result = await this.executeQuery(`
+        SELECT name, tbl_name, sql 
+        FROM sqlite_master 
+        WHERE type = 'index' 
+        AND name NOT LIKE 'sqlite_%'
+        ORDER BY name
+      `);
+
+      const indexes: Array<{ name: string; table: string; columns: string; exists: boolean }> = [];
+      
+      for (let i = 0; i < result.rows.length; i++) {
+        const row = result.rows.item(i);
+        indexes.push({
+          name: row.name,
+          table: row.tbl_name,
+          columns: row.sql || '',
+          exists: true,
+        });
+      }
+
+      // Check for expected indexes from migration v2
+      const expectedIndexes = [
+        'idx_sessions_status_created',
+        'idx_players_session_status_joined',
+        'idx_transactions_session_player_time',
+        'idx_profiles_last_played_games',
+      ];
+
+      const existingIndexNames = indexes.map(idx => idx.name);
+      const missing = expectedIndexes.filter(name => !existingIndexNames.includes(name));
+
+      return {
+        valid: missing.length === 0,
+        indexes,
+        missing,
+      };
+    } catch (error) {
+      console.error('Index validation failed:', error);
+      return {
+        valid: false,
+        indexes: [],
+        missing: [],
+      };
+    }
+  }
+
+  public async getIndexStatistics(): Promise<{
+    totalIndexes: number;
+    indexSizeBytes: number;
+    indexUsage: Array<{ name: string; usage: number }>;
+  }> {
+    try {
+      // Get index count
+      const indexResult = await this.executeQuery(`
+        SELECT COUNT(*) as count 
+        FROM sqlite_master 
+        WHERE type = 'index' 
+        AND name NOT LIKE 'sqlite_%'
+      `);
+      const totalIndexes = indexResult.rows.item(0)?.count || 0;
+
+      // Estimate index size (simplified calculation)
+      const sizeResult = await this.executeQuery('PRAGMA page_count');
+      const pageCount = sizeResult.rows.item(0)?.page_count || 0;
+      const pageSizeResult = await this.executeQuery('PRAGMA page_size');
+      const pageSize = pageSizeResult.rows.item(0)?.page_size || 0;
+      
+      // Rough estimate: indexes typically use 10-30% of total database size
+      const indexSizeBytes = Math.round((pageCount * pageSize) * 0.2);
+
+      return {
+        totalIndexes,
+        indexSizeBytes,
+        indexUsage: [], // Real usage stats would require SQLite with STAT4
+      };
+    } catch (error) {
+      console.error('Index statistics failed:', error);
+      return {
+        totalIndexes: 0,
+        indexSizeBytes: 0,
+        indexUsage: [],
+      };
+    }
+  }
+
+  // Query analysis and optimization tools
+  public async analyzeQuery(sql: string, params: any[] = []): Promise<QueryAnalysis> {
+    try {
+      if (!this.database) {
+        await this.initialize();
+      }
+
+      // Get execution plan
+      const explainResult = await this.executeQuery(`EXPLAIN QUERY PLAN ${sql}`, params);
+      
+      const executionPlan: Array<{
+        id: number;
+        parent: number;
+        notused: number;
+        detail: string;
+      }> = [];
+
+      for (let i = 0; i < explainResult.rows.length; i++) {
+        const row = explainResult.rows.item(i);
+        executionPlan.push({
+          id: row.id,
+          parent: row.parent,
+          notused: row.notused,
+          detail: row.detail,
+        });
+      }
+
+      // Analyze execution plan for index usage and recommendations
+      const analysis = this.analyzeExecutionPlan(executionPlan, sql);
+
+      // Measure actual execution time
+      const startTime = Date.now();
+      await this.executeQuery(sql, params);
+      const executionTimeMs = Date.now() - startTime;
+
+      return {
+        sql,
+        executionPlan,
+        estimatedCost: analysis.estimatedCost,
+        indexesUsed: analysis.indexesUsed,
+        recommendations: analysis.recommendations,
+        executionTimeMs,
+      };
+    } catch (error) {
+      console.error('Query analysis failed:', error);
+      return {
+        sql,
+        executionPlan: [],
+        estimatedCost: 0,
+        indexesUsed: [],
+        recommendations: ['Query analysis failed - check query syntax'],
+      };
+    }
+  }
+
+  private analyzeExecutionPlan(
+    plan: Array<{ id: number; parent: number; notused: number; detail: string }>,
+    sql: string
+  ): {
+    estimatedCost: number;
+    indexesUsed: string[];
+    recommendations: string[];
+  } {
+    const indexesUsed: string[] = [];
+    const recommendations: string[] = [];
+    let estimatedCost = 0;
+
+    for (const step of plan) {
+      const detail = step.detail.toLowerCase();
+      
+      // Extract index usage
+      if (detail.includes('using index')) {
+        const indexMatch = detail.match(/using index (\w+)/);
+        if (indexMatch) {
+          indexesUsed.push(indexMatch[1]);
+        }
+      }
+
+      // Analyze cost indicators
+      if (detail.includes('scan table')) {
+        estimatedCost += 100; // Full table scan is expensive
+        if (!detail.includes('using index')) {
+          recommendations.push('Consider adding an index for table scan optimization');
+        }
+      }
+
+      if (detail.includes('search table')) {
+        estimatedCost += 10; // Index search is cheap
+      }
+
+      // Specific recommendations
+      if (detail.includes('temporary b-tree')) {
+        estimatedCost += 50;
+        recommendations.push('Query uses temporary storage - consider optimizing ORDER BY or GROUP BY');
+      }
+
+      if (detail.includes('nested loop')) {
+        estimatedCost += 25;
+        if (plan.length > 3) {
+          recommendations.push('Complex nested loop detected - consider query restructuring');
+        }
+      }
+    }
+
+    // SQL-specific recommendations
+    const sqlLower = sql.toLowerCase();
+    if (sqlLower.includes('select *')) {
+      recommendations.push('Avoid SELECT * - specify only needed columns');
+    }
+
+    if (sqlLower.includes('order by') && !indexesUsed.some(idx => idx.includes('timestamp'))) {
+      recommendations.push('Consider adding an index for ORDER BY optimization');
+    }
+
+    return {
+      estimatedCost,
+      indexesUsed,
+      recommendations,
+    };
+  }
+
+  public enableQueryLogging(enable: boolean = true): void {
+    this.queryLoggingEnabled = enable;
+    if (enable) {
+      console.log('Database query logging enabled');
+    }
+  }
+
+  public setSlowQueryThreshold(thresholdMs: number): void {
+    this.slowQueryThreshold = thresholdMs;
+  }
+
+  public getSlowQueryLog(): SlowQueryLog[] {
+    return [...this.slowQueryLog];
+  }
+
+  public clearSlowQueryLog(): void {
+    this.slowQueryLog = [];
+  }
+
+  private logSlowQuery(sql: string, params: any[], executionTimeMs: number): void {
+    if (!this.queryLoggingEnabled || executionTimeMs < this.slowQueryThreshold) {
+      return;
+    }
+
+    const logEntry: SlowQueryLog = {
+      sql,
+      params,
+      executionTimeMs,
+      timestamp: new Date(),
+      stackTrace: new Error().stack,
+    };
+
+    this.slowQueryLog.push(logEntry);
+
+    // Maintain log size limit
+    if (this.slowQueryLog.length > this.maxSlowQueryLogSize) {
+      this.slowQueryLog.shift();
+    }
+
+    console.warn(`Slow query detected (${executionTimeMs.toFixed(2)}ms):`, sql);
+  }
+
+  // Enhanced executeQuery with performance monitoring
+  public async executeQueryWithTiming(
+    query: string,
+    params: any[] = []
+  ): Promise<{ result: QueryResult; executionTimeMs: number }> {
+    const startTime = Date.now();
+    
+    try {
+      const result = await this.executeQuery(query, params);
+      const executionTimeMs = Date.now() - startTime;
+      
+      this.logSlowQuery(query, params, executionTimeMs);
+      
+      return { result, executionTimeMs };
+    } catch (error) {
+      const executionTimeMs = Date.now() - startTime;
+      this.logSlowQuery(query, params, executionTimeMs);
+      throw error;
+    }
+  }
+
+  // Performance monitoring and metrics
+  public async measureQueryPerformance<T>(
+    operation: () => Promise<T>
+  ): Promise<PerformanceResult<T>> {
+    const startTime = Date.now();
+    let memoryBefore = 0;
+    let memoryAfter = 0;
+
+    try {
+      // Get memory usage before operation (simplified)
+      const { sizeInBytes: sizeBefore } = await this.getDatabaseSize();
+      memoryBefore = sizeBefore;
+
+      // Execute operation
+      const result = await operation();
+      
+      // Calculate execution time
+      const executionTimeMs = Date.now() - startTime;
+      
+      // Get memory usage after operation
+      const { sizeInBytes: sizeAfter } = await this.getDatabaseSize();
+      memoryAfter = sizeAfter;
+      
+      // Update performance metrics
+      this.updatePerformanceMetrics(executionTimeMs, false);
+      
+      return {
+        result,
+        executionTimeMs,
+        memoryUsedMB: (memoryAfter - memoryBefore) / (1024 * 1024),
+        cacheHits: this.performanceMetrics.cacheHits,
+        cacheMisses: this.performanceMetrics.cacheMisses,
+      };
+    } catch (error) {
+      const executionTimeMs = Date.now() - startTime;
+      this.updatePerformanceMetrics(executionTimeMs, true);
+      throw error;
+    }
+  }
+
+  private updatePerformanceMetrics(executionTimeMs: number, isError: boolean): void {
+    this.performanceMetrics.totalQueries++;
+    this.performanceMetrics.totalExecutionTime += executionTimeMs;
+    
+    if (isError) {
+      this.performanceMetrics.totalErrors++;
+    }
+    
+    if (executionTimeMs > this.slowQueryThreshold) {
+      this.performanceMetrics.slowQueries++;
+    }
+  }
+
+  public getDatabaseMetrics(): DatabaseMetrics {
+    const totalQueries = this.performanceMetrics.totalQueries;
+    const averageQueryTimeMs = totalQueries > 0 
+      ? this.performanceMetrics.totalExecutionTime / totalQueries 
+      : 0;
+    
+    const errorRate = totalQueries > 0 
+      ? (this.performanceMetrics.totalErrors / totalQueries) * 100 
+      : 0;
+    
+    const totalCacheRequests = this.performanceMetrics.cacheHits + this.performanceMetrics.cacheMisses;
+    const cacheHitRate = totalCacheRequests > 0 
+      ? (this.performanceMetrics.cacheHits / totalCacheRequests) * 100 
+      : 0;
+
+    return {
+      totalQueries,
+      averageQueryTimeMs,
+      slowQueries: this.performanceMetrics.slowQueries,
+      errorRate,
+      memoryUsageMB: 0, // Will be populated by getDatabaseSize()
+      cacheHitRate,
+      connectionCount: this.database ? 1 : 0,
+      lastUpdated: new Date(),
+    };
+  }
+
+  public async getDetailedMetrics(): Promise<DatabaseMetrics> {
+    const baseMetrics = this.getDatabaseMetrics();
+    
+    try {
+      const { sizeInBytes } = await this.getDatabaseSize();
+      baseMetrics.memoryUsageMB = sizeInBytes / (1024 * 1024);
+    } catch (error) {
+      console.warn('Failed to get database size for metrics:', error);
+    }
+
+    return baseMetrics;
+  }
+
+  public resetPerformanceMetrics(): void {
+    this.performanceMetrics = {
+      totalQueries: 0,
+      totalExecutionTime: 0,
+      slowQueries: 0,
+      totalErrors: 0,
+      cacheHits: 0,
+      cacheMisses: 0,
+      startTime: new Date(),
+    };
+    this.slowQueryLog = [];
+  }
+
+  public async validatePerformanceThresholds(): Promise<{
+    valid: boolean;
+    violations: string[];
+    recommendations: string[];
+  }> {
+    const violations: string[] = [];
+    const recommendations: string[] = [];
+
+    try {
+      const metrics = await this.getDetailedMetrics();
+
+      // Check 100ms query time requirement
+      if (metrics.averageQueryTimeMs > 100) {
+        violations.push(`Average query time (${metrics.averageQueryTimeMs.toFixed(2)}ms) exceeds 100ms threshold`);
+        recommendations.push('Consider optimizing slow queries and adding indexes');
+      }
+
+      // Check 50MB memory usage requirement
+      if (metrics.memoryUsageMB > 50) {
+        violations.push(`Database memory usage (${metrics.memoryUsageMB.toFixed(2)}MB) exceeds 50MB threshold`);
+        recommendations.push('Consider database cleanup, archiving old data, or VACUUM operations');
+      }
+
+      // Check error rate
+      if (metrics.errorRate > 1) {
+        violations.push(`Error rate (${metrics.errorRate.toFixed(2)}%) is too high`);
+        recommendations.push('Review and fix failing queries');
+      }
+
+      // Check slow query percentage
+      const slowQueryPercentage = metrics.totalQueries > 0 
+        ? (metrics.slowQueries / metrics.totalQueries) * 100 
+        : 0;
+      
+      if (slowQueryPercentage > 10) {
+        violations.push(`Slow query percentage (${slowQueryPercentage.toFixed(2)}%) exceeds 10% threshold`);
+        recommendations.push('Optimize slow queries with better indexing or query restructuring');
+      }
+
+      return {
+        valid: violations.length === 0,
+        violations,
+        recommendations,
+      };
+    } catch (error) {
+      return {
+        valid: false,
+        violations: ['Performance validation failed'],
+        recommendations: ['Check database connectivity and basic operations'],
+      };
+    }
+  }
+
+  // Prepared statement optimization
+  public async executePreparedQuery(
+    sql: string,
+    params: any[] = []
+  ): Promise<QueryResult> {
+    // Check if statement is cached
+    const cachedStmt = this.statementCache.get(sql);
+    
+    if (cachedStmt) {
+      // Cache hit - use cached statement metadata for optimization
+      this.performanceMetrics.cacheHits++;
+    } else {
+      // Cache miss - add to cache
+      this.statementCache.set(sql, params.length);
+      this.performanceMetrics.cacheMisses++;
+    }
+
+    // Execute query (React Native SQLite doesn't support true prepared statements,
+    // but we can optimize by caching query analysis)
+    try {
+      const result = await this.executeQuery(sql, params);
+      
+      // Performance metrics are already handled in executeQuery
+      return result;
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  public getStatementCacheStats(): PreparedStatementStats {
+    return this.statementCache.getStats();
+  }
+
+  public getFrequentlyUsedStatements(limit: number = 10): Array<{ sql: string; usageCount: number }> {
+    return this.statementCache.getFrequentlyUsedStatements(limit);
+  }
+
+  public clearStatementCache(): void {
+    this.statementCache.clear();
+  }
+
+  // Lifecycle management for prepared statements
+  public async invalidateStatementCache(): Promise<void> {
+    this.statementCache.clear();
+    console.log('Prepared statement cache invalidated');
+  }
+
+  public async optimizePreparedStatements(): Promise<{
+    analyzed: number;
+    optimized: number;
+    recommendations: string[];
+  }> {
+    const frequentStatements = this.getFrequentlyUsedStatements(20);
+    const recommendations: string[] = [];
+    let analyzed = 0;
+    let optimized = 0;
+
+    for (const { sql, usageCount } of frequentStatements) {
+      analyzed++;
+      
+      try {
+        // Analyze frequently used statements for optimization opportunities
+        const analysis = await this.analyzeQuery(sql);
+        
+        if (analysis.recommendations.length > 0) {
+          recommendations.push(
+            `Statement used ${usageCount} times: ${sql.substring(0, 50)}...`
+          );
+          recommendations.push(...analysis.recommendations.map(r => `  → ${r}`));
+          optimized++;
+        }
+      } catch (error) {
+        console.warn('Failed to analyze prepared statement:', sql, error);
+      }
+    }
+
+    return {
+      analyzed,
+      optimized,
+      recommendations,
+    };
+  }
+
+  // Performance comparison between prepared and dynamic statements
+  public async compareStatementPerformance(
+    sql: string,
+    params: any[] = [],
+    iterations: number = 10
+  ): Promise<{
+    dynamicAverage: number;
+    preparedAverage: number;
+    improvement: number;
+    recommendation: string;
+  }> {
+    // Test dynamic execution
+    const dynamicTimes: number[] = [];
+    for (let i = 0; i < iterations; i++) {
+      const startTime = Date.now();
+      await this.executeQuery(sql, params);
+      dynamicTimes.push(Date.now() - startTime);
+    }
+
+    // Test prepared execution (with caching)
+    const preparedTimes: number[] = [];
+    for (let i = 0; i < iterations; i++) {
+      const startTime = Date.now();
+      await this.executePreparedQuery(sql, params);
+      preparedTimes.push(Date.now() - startTime);
+    }
+
+    const dynamicAverage = dynamicTimes.reduce((a, b) => a + b, 0) / iterations;
+    const preparedAverage = preparedTimes.reduce((a, b) => a + b, 0) / iterations;
+    const improvement = ((dynamicAverage - preparedAverage) / dynamicAverage) * 100;
+
+    let recommendation = '';
+    if (improvement > 10) {
+      recommendation = 'Use prepared statements for significant performance benefit';
+    } else if (improvement > 5) {
+      recommendation = 'Prepared statements provide modest improvement';
+    } else {
+      recommendation = 'Dynamic statements are sufficient for this query';
+    }
+
+    return {
+      dynamicAverage,
+      preparedAverage,
+      improvement,
+      recommendation,
+    };
+  }
+
+  // Development tools and debugging
+  public createProfiler() {
+    const { DatabaseProfiler } = require('./DatabaseProfiler');
+    return new DatabaseProfiler(this);
+  }
+
+  public async getDevelopmentInfo(): Promise<{
+    config: any;
+    metrics: DatabaseMetrics;
+    health: any;
+    recommendations: string[];
+  }> {
+    const config = this.getConfig();
+    const metrics = await this.getDetailedMetrics();
+    const health = await this.getHealthStatus();
+    const validation = await this.validatePerformanceThresholds();
+
+    return {
+      config,
+      metrics,
+      health,
+      recommendations: validation.recommendations,
+    };
+  }
+
+  public async enableDevelopmentMode(): Promise<void> {
+    console.log('🔧 Enabling database development mode...');
+    
+    this.enableQueryLogging(true);
+    this.setSlowQueryThreshold(50); // Lower threshold for development
+    
+    // Log current configuration
+    const info = await this.getDevelopmentInfo();
+    console.log('📊 Database Development Info:', {
+      queries: info.metrics.totalQueries,
+      avgTime: info.metrics.averageQueryTimeMs.toFixed(2) + 'ms',
+      memory: info.metrics.memoryUsageMB.toFixed(2) + 'MB',
+      connections: info.metrics.connectionCount,
+    });
+
+    console.log('✅ Development mode enabled');
+  }
+
+  public async disableDevelopmentMode(): Promise<void> {
+    console.log('🔧 Disabling database development mode...');
+    
+    this.enableQueryLogging(false);
+    this.setSlowQueryThreshold(100); // Back to production threshold
+    this.clearSlowQueryLog();
+    
+    console.log('✅ Development mode disabled');
+  }
+
+  // Database seeding utilities for development
+  public async seedDevelopmentData(): Promise<void> {
+    console.log('🌱 Seeding development data...');
+    
+    try {
+      // Create sample session
+      const sessionId = uuidv4();
+      await this.createSession({
+        name: 'Development Test Session',
+        organizerId: 'dev-organizer',
+        status: 'active',
+        totalPot: 500.00,
+        playerCount: 4,
+        startedAt: new Date(),
+      });
+
+      // Create sample player profiles
+      const profiles = [
+        { name: 'Alice Johnson', preferredBuyIn: 100 },
+        { name: 'Bob Smith', preferredBuyIn: 150 },
+        { name: 'Carol Davis', preferredBuyIn: 75 },
+        { name: 'Dave Wilson', preferredBuyIn: 125 },
+      ];
+
+      for (const profile of profiles) {
+        await this.createProfile({
+          ...profile,
+          gamesPlayed: Math.floor(Math.random() * 20),
+          lastPlayedAt: new Date(Date.now() - Math.random() * 30 * 24 * 60 * 60 * 1000), // Random date within last 30 days
+        });
+      }
+
+      // Add players to session
+      for (let i = 0; i < 4; i++) {
+        const playerId = uuidv4();
+        await this.addPlayer({
+          sessionId,
+          name: profiles[i].name,
+          isGuest: false,
+          currentBalance: profiles[i].preferredBuyIn,
+          totalBuyIns: profiles[i].preferredBuyIn,
+          totalCashOuts: 0,
+          status: 'active',
+        });
+
+        // Add some transactions
+        await this.recordTransaction({
+          sessionId,
+          playerId,
+          type: 'buy_in',
+          amount: profiles[i].preferredBuyIn,
+          method: Math.random() > 0.5 ? 'voice' : 'manual',
+          isVoided: false,
+          createdBy: 'dev-seeder',
+        });
+      }
+
+      console.log('✅ Development data seeded successfully');
+      console.log(`   - Session: ${sessionId}`);
+      console.log(`   - Players: ${profiles.length}`);
+      console.log(`   - Transactions: ${profiles.length}`);
+      
+    } catch (error) {
+      console.error('❌ Failed to seed development data:', error);
+      throw new ServiceError('DEV_SEED_FAILED', 'Failed to seed development data');
+    }
+  }
+
 
   public async isConnected(): Promise<boolean> {
     try {
@@ -748,11 +1886,106 @@ export class DatabaseService {
     };
   }
 
+  // Comprehensive database integrity checks
+  public async performIntegrityCheck(): Promise<{
+    passed: boolean;
+    results: {
+      integrityCheck: boolean;
+      foreignKeyCheck: boolean;
+      quickCheck: boolean;
+      schemaValidation: boolean;
+    };
+    issues: string[];
+    recommendations: string[];
+  }> {
+    const issues: string[] = [];
+    const recommendations: string[] = [];
+    const results = {
+      integrityCheck: false,
+      foreignKeyCheck: false,
+      quickCheck: false,
+      schemaValidation: false,
+    };
+
+    try {
+      // Full integrity check
+      const integrityResult = await this.executeQuery('PRAGMA integrity_check');
+      const integrityStatus = integrityResult.rows.item(0)?.integrity_check || 'failed';
+      results.integrityCheck = integrityStatus === 'ok';
+      
+      if (!results.integrityCheck) {
+        issues.push(`Database integrity check failed: ${integrityStatus}`);
+        recommendations.push('Run database repair or restore from backup');
+      }
+
+      // Quick check (faster alternative)
+      const quickResult = await this.executeQuery('PRAGMA quick_check');
+      const quickStatus = quickResult.rows.item(0)?.quick_check || 'failed';
+      results.quickCheck = quickStatus === 'ok';
+      
+      if (!results.quickCheck) {
+        issues.push(`Database quick check failed: ${quickStatus}`);
+        recommendations.push('Investigate database corruption');
+      }
+
+      // Foreign key check
+      const foreignKeyResult = await this.executeQuery('PRAGMA foreign_key_check');
+      results.foreignKeyCheck = foreignKeyResult.rows.length === 0;
+      
+      if (!results.foreignKeyCheck) {
+        issues.push('Foreign key constraints violated');
+        recommendations.push('Fix orphaned records or disable foreign key constraints');
+      }
+
+      // Schema validation
+      const expectedTables = ['sessions', 'players', 'transactions', 'player_profiles', 'migrations'];
+      const tablesResult = await this.executeQuery(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"
+      );
+      
+      const existingTables: string[] = [];
+      for (let i = 0; i < tablesResult.rows.length; i++) {
+        existingTables.push(tablesResult.rows.item(i).name);
+      }
+      
+      const missingTables = expectedTables.filter(table => !existingTables.includes(table));
+      results.schemaValidation = missingTables.length === 0;
+      
+      if (!results.schemaValidation) {
+        issues.push(`Missing tables: ${missingTables.join(', ')}`);
+        recommendations.push('Run database migrations to create missing tables');
+      }
+
+      return {
+        passed: Object.values(results).every(Boolean),
+        results,
+        issues,
+        recommendations,
+      };
+    } catch (error) {
+      return {
+        passed: false,
+        results: {
+          integrityCheck: false,
+          foreignKeyCheck: false,
+          quickCheck: false,
+          schemaValidation: false,
+        },
+        issues: [`Integrity check failed: ${error instanceof Error ? error.message : 'Unknown error'}`],
+        recommendations: ['Check database connectivity and permissions'],
+      };
+    }
+  }
+
   // Health status for monitoring and debugging
   public async getHealthStatus(): Promise<{
     connected: boolean;
     version: string;
     tablesCount: number;
+    integrity?: {
+      passed: boolean;
+      issues: string[];
+    };
   }> {
     try {
       if (!this.database) {
@@ -786,10 +2019,24 @@ export class DatabaseService {
         // Ignore table count errors
       }
 
+      // Optional integrity check for comprehensive health status
+      let integrity = undefined;
+      try {
+        const integrityCheck = await this.performIntegrityCheck();
+        integrity = {
+          passed: integrityCheck.passed,
+          issues: integrityCheck.issues,
+        };
+      } catch (error) {
+        // Don't fail health check if integrity check fails
+        console.warn('Integrity check failed during health status:', error);
+      }
+
       return {
         connected,
         version,
         tablesCount,
+        integrity,
       };
     } catch (error) {
       console.error('Database health check failed:', error);
