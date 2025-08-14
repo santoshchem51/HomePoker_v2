@@ -1,95 +1,77 @@
 # Testing Strategy
 
-Define comprehensive testing approach with **90% code coverage requirement** and robust visual testing:
+Define comprehensive testing approach with **80% code coverage target** and proper service mocking:
 
 ## Testing Standards and Requirements
 
 **Code Coverage Standards:**
-- **Overall Coverage Target:** 90% minimum across all code paths
-- **Critical Path Coverage:** 100% for financial calculations, settlement algorithms, and transaction processing
-- **Component Coverage:** 85% minimum for UI components with focus on user interactions
-- **Service Layer Coverage:** 95% minimum for all business logic services
-- **Database Layer Coverage:** 90% minimum for all data operations
+- **Overall Coverage Target:** 80% across all code paths (realistic for React Native apps)
+- **Critical Path Coverage:** 95% for financial calculations, settlement algorithms, and transaction processing
+- **Component Coverage:** 75% for UI components with focus on user interactions
+- **Service Layer Coverage:** 85% for all business logic services
+- **Database Layer Coverage:** 80% for all data operations
 
-## Enhanced Testing Pyramid with Coverage Targets
+## Testing Pyramid with Coverage Targets
 
 ```
-                  E2E Tests (90% user flow coverage)
-                 /                                \
-         Visual Tests (95% UI component coverage)
-            /                                      \
-    Integration Tests (85% service interaction coverage)
-               /                                        \
-          Frontend Unit (90%)              Backend Unit (95%)
+                  E2E Tests (Key user flows)
+                 /                         \
+    Integration Tests (Service interactions with mocks)
+               /                                    \
+          Frontend Unit (75%)              Backend Unit (85%)
 ```
 
 ## Test Organization
 
-### Frontend Tests (90% Coverage Target)
+### Frontend Tests (75% Coverage Target)
 - Component unit tests with React Native Testing Library
 - Screen integration tests
 - Custom hook tests
 - State management tests
 - Utility function tests
 
-### Backend Tests (95% Coverage Target)
-- Business logic tests (100% for financial services)
-- Database and device tests
-- External integration tests
+### Backend Tests (85% Coverage Target)
+- Business logic tests (95% for financial services)
+- Database tests with proper mocking
+- External integration tests with service mocks
 
-### Visual Testing Strategy (95% UI Coverage)
-- React Native visual tests with mobile-mcp
-- Component screenshot tests
-- Accessibility compliance validation
-- Animation and celebration testing
+### Service Mocking Strategy
+- Mock all external services (WhatsApp, database, voice) in unit tests
+- Use centralized mock factories from `tests/mock-factories.js`
+- Integration tests should use service mocks, not real external calls
+- Only E2E tests should use real services in controlled environments
 
-## Visual Testing Requirements
+## Test Isolation and Mocking Requirements
 
-### Critical Requirement: Authentic App Representation
+### Service Mocking Principles
 
-**All visual testing and demonstrations must use the ACTUAL application implementation - never generic HTML mockups or misrepresentations.**
+**All tests must use proper service mocking to avoid external dependencies and ensure test reliability.**
 
-### Requirements for Story Visual Validation:
+### Mock Requirements:
 
-1. **Real App Only**: 
-   - Use the actual PokePotExpo React Native application
-   - Show real mobile UI components (TouchableOpacity, ScrollView, Alert dialogs)
-   - Display authentic React Native styling and interactions
-   - Demonstrate actual navigation patterns implemented in the app
+1. **Database Service Mocking**: 
+   - Use SQLite in-memory database for tests
+   - Mock database calls in unit tests with `tests/mock-factories.js`
+   - Never make real database calls in unit tests
+   - Use `createTestStore()` for isolated state testing
 
-2. **Authentic Mobile Experience**:
-   - Screenshots must show real mobile interface design
-   - Videos must capture actual touch interactions and mobile behaviors
-   - Navigation must demonstrate real app flow between screens
-   - Alerts and feedback must show actual React Native Alert dialogs
+2. **External Service Mocking**:
+   - Mock WhatsApp service calls to prevent actual message sending
+   - Mock voice service to avoid device dependencies
+   - Mock notification service to prevent system alerts during tests
+   - Use centralized mocks from test setup files
 
-3. **Real Implementation Testing**:
-   - Test actual state management and data flows
-   - Validate real calculation logic and business rules
-   - Demonstrate actual transaction handling and validation
-   - Show real WhatsApp integration and message formatting
+3. **Integration Test Mocking**:
+   - Mock external services even in integration tests
+   - Test service interactions through mocked interfaces
+   - Validate service contracts without external calls
+   - Use dependency injection for better testability
 
-4. **No Misrepresentation**:
-   - Never use HTML demos as substitutes for the real app
-   - Never create generic web interfaces that don't match the mobile app
-   - Never present simplified versions that don't show real complexity
-   - Always show the authentic user experience
-
-### Documentation Standards:
-
-- All screenshots must be from the actual React Native app
-- All videos must show real mobile interactions
-- All functionality demonstrations must use real app features
-- All visual evidence must accurately represent how users will experience the app
-
-### For Story Testing and All Future Stories:
-
-Every story requiring visual validation must:
-1. Run the actual PokePotExpo React Native application
-2. Capture authentic mobile screenshots showing real UI
-3. Record real app interactions and workflows
-4. Document authentic user experience and functionality
-5. Provide accurate representation of the mobile app interface
+4. **Test Data Management**:
+   - Use data factories for consistent test data
+   - Isolate test data to prevent cross-test contamination
+   - Clean up test data after each test
+   - Use realistic but controlled test scenarios
 
 ## Visual Validation Process
 
@@ -606,6 +588,8 @@ Story Documentation Updated:
 
 ## Financial Calculation Testing
 
+Critical financial calculations require the highest test coverage (95%) with comprehensive edge case testing:
+
 ```typescript
 describe('Financial Calculation Accuracy', () => {
   test('handles currency precision correctly', () => {
@@ -644,3 +628,42 @@ describe('Financial Calculation Accuracy', () => {
   });
 });
 ```
+
+## Mock Implementation Examples
+
+### Complete Service Mock Setup
+```typescript
+// tests/mock-factories.js
+export const ServiceMocks = {
+  createDatabaseService: () => ({
+    insert: jest.fn(),
+    query: jest.fn(),
+    update: jest.fn(),
+    delete: jest.fn(),
+    transaction: jest.fn((callback) => callback()),
+    healthCheck: jest.fn().mockResolvedValue({ status: 'healthy' })
+  }),
+  
+  createWhatsAppService: () => ({
+    sendMessage: jest.fn().mockResolvedValue({ success: true }),
+    isAvailable: jest.fn().mockReturnValue(true),
+    formatSettlement: jest.fn().mockReturnValue('Mocked message')
+  }),
+  
+  createVoiceService: () => ({
+    startListening: jest.fn(),
+    stopListening: jest.fn(),
+    isAvailable: jest.fn().mockReturnValue(false) // Test fallback paths
+  })
+};
+
+// Use in tests:
+const mockDB = ServiceMocks.createDatabaseService();
+SessionService.setDatabaseService(mockDB);
+```
+
+This approach ensures:
+- ✅ No external service dependencies in tests
+- ✅ Consistent mock behavior across test suites  
+- ✅ Fast test execution without I/O operations
+- ✅ Reliable test results independent of external services

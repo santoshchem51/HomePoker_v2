@@ -85,10 +85,59 @@ export class WhatsAppService {
   }
 
   /**
-   * Share message via WhatsApp using URL scheme
+   * Share message string to WhatsApp using URL scheme
+   * Story 4.1: Implements AC: 2, 4, 5, 8
+   */
+  public async shareToWhatsApp(message: string): Promise<ShareResult> {
+    try {
+      // Validate message length
+      if (!this.validateMessage(message)) {
+        throw new ServiceError(
+          'WHATSAPP_MESSAGE_INVALID',
+          'Message exceeds WhatsApp character limit',
+          { messageLength: message.length, limit: WHATSAPP_MESSAGE_LIMIT }
+        );
+      }
+
+      // Check if WhatsApp is available
+      const isWhatsAppAvailable = await this.isWhatsAppAvailable();
+      
+      if (!isWhatsAppAvailable) {
+        // Fallback to clipboard
+        return await this.fallbackToClipboard(message);
+      }
+
+      // Encode message for URL scheme
+      const encodedMessage = encodeURIComponent(message);
+      const whatsappUrl = `${WHATSAPP_URL_SCHEME}${encodedMessage}`;
+
+      // Open WhatsApp with the message
+      const canOpen = await Linking.canOpenURL(whatsappUrl);
+      if (!canOpen) {
+        return await this.fallbackToClipboard(message);
+      }
+
+      await Linking.openURL(whatsappUrl);
+
+      return {
+        success: true,
+        method: 'whatsapp'
+      };
+    } catch (error) {
+      console.error('WhatsApp sharing failed:', error);
+      // Fallback to clipboard on any error
+      return await this.fallbackToClipboard(
+        message,
+        error instanceof Error ? error.message : 'Unknown error'
+      );
+    }
+  }
+
+  /**
+   * Share WhatsApp message object (legacy method)
    * AC: 3, 6
    */
-  public async shareToWhatsApp(message: WhatsAppMessage): Promise<ShareResult> {
+  public async shareWhatsAppMessage(message: WhatsAppMessage): Promise<ShareResult> {
     try {
       // Check if WhatsApp is available
       const isWhatsAppAvailable = await this.isWhatsAppAvailable();
@@ -121,6 +170,18 @@ export class WhatsAppService {
         error instanceof Error ? error.message : 'Unknown error'
       );
     }
+  }
+
+  /**
+   * Validate WhatsApp message
+   * Story 4.1: Implements AC: 8
+   */
+  private validateMessage(message: string): boolean {
+    if (!message || typeof message !== 'string') {
+      return false;
+    }
+    
+    return message.length <= WHATSAPP_MESSAGE_LIMIT;
   }
 
   /**

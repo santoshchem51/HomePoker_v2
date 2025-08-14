@@ -126,7 +126,7 @@ export class MessageQueue {
           };
 
           // Attempt to share
-          const result = await this.whatsAppService.shareToWhatsApp(whatsAppMessage);
+          const result = await this.whatsAppService.shareWhatsAppMessage(whatsAppMessage);
           
           if (result.success && result.method === 'whatsapp') {
             // Successfully sent, remove from queue

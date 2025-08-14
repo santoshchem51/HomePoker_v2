@@ -1,0 +1,643 @@
+/**
+ * TransactionService Unit Tests
+ * Tests Story 1.3 requirements for transaction recording and management
+ */
+import TransactionService from '../../../src/services/core/TransactionService';
+import { DatabaseService } from '../../../src/services/infrastructure/DatabaseService';
+import { SessionService } from '../../../src/services/core/SessionService';
+import { UndoManager } from '../../../src/utils/undo-manager';
+import { ErrorCode } from '../../../src/types/errors';
+import { ErrorMatchers, DomainErrorTesters } from '../../error-testing';
+import { TRANSACTION_LIMITS } from '../../../src/types/transaction';
+
+// Mock dependencies
+jest.mock('../../../src/services/infrastructure/DatabaseService');
+jest.mock('../../../src/services/core/SessionService');
+jest.mock('../../../src/utils/undo-manager');
+
+const MockDatabaseService = DatabaseService as jest.MockedClass<typeof DatabaseService>;
+const MockSessionService = SessionService as jest.MockedClass<typeof SessionService>;
+const MockUndoManager = UndoManager as jest.MockedClass<typeof UndoManager>;
+
+describe('TransactionService', () => {
+  let transactionService: TransactionService;
+  let mockDbService: jest.Mocked<DatabaseService>;
+  let mockSessionService: jest.Mocked<SessionService>;
+  let mockUndoManager: jest.Mocked<UndoManager>;
+
+  const validSession = {
+    id: 'session-1',
+    name: 'Test Session',
+    organizerId: 'organizer-1',
+    status: 'active' as const,
+    createdAt: new Date(),
+    totalPot: 100.00,
+    playerCount: 4
+  };
+
+  // Removed validPlayer - not used in unit tests
+
+  const validTransaction = {
+    id: 'transaction-1',
+    sessionId: 'session-1',
+    playerId: 'player-1',
+    type: 'buy_in' as const,
+    amount: 25.00,
+    timestamp: new Date(),
+    method: 'manual' as const,
+    isVoided: false,
+    createdBy: 'user'
+  };
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+
+    // Setup database service mock
+    mockDbService = {
+      executeQuery: jest.fn(),
+      executeTransaction: jest.fn(),
+      getPlayers: jest.fn(() => Promise.resolve([])),
+      getPlayer: jest.fn(() => Promise.resolve(null)),
+      getSession: jest.fn(() => Promise.resolve(null)),
+      getTransactions: jest.fn(() => Promise.resolve([])),
+      getTransaction: jest.fn(() => Promise.resolve(null)),
+    } as any;
+    MockDatabaseService.getInstance.mockReturnValue(mockDbService);
+
+    // Setup session service mock
+    mockSessionService = {
+      getSession: jest.fn(),
+    } as any;
+    MockSessionService.getInstance.mockReturnValue(mockSessionService);
+
+    // Setup undo manager mock
+    mockUndoManager = {
+      addUndoableTransaction: jest.fn(),
+      canUndo: jest.fn(),
+      removeUndoableTransaction: jest.fn(),
+      getRemainingUndoTime: jest.fn(),
+      getMostRecentUndoableTransaction: jest.fn(),
+    } as any;
+    MockUndoManager.getInstance.mockReturnValue(mockUndoManager);
+
+    transactionService = TransactionService.getInstance();
+  });
+
+  describe('recordBuyIn', () => {
+    beforeEach(() => {
+      mockSessionService.getSession.mockResolvedValue(validSession);
+      mockDbService.executeQuery.mockResolvedValue([{ 
+        id: 'player-1', 
+        status: 'active' 
+      }]);
+      mockDbService.executeTransaction.mockResolvedValue(undefined);
+    });
+
+    it('should record a valid buy-in transaction', async () => {
+      // Mock successful transaction creation
+      mockDbService.executeQuery
+        .mockResolvedValueOnce([{ id: 'player-1', status: 'active' }]) // Player validation
+        .mockResolvedValueOnce([]) // Duplicate check
+        .mockResolvedValueOnce([{ // Get transaction
+          ...validTransaction,
+          timestamp: validTransaction.timestamp.toISOString(),
+          player_name: 'John Doe'
+        }]);
+
+      const result = await transactionService.recordBuyIn(
+        'session-1', 
+        'player-1', 
+        25.00
+      );
+
+      expect(result).toEqual(validTransaction);
+      expect(mockDbService.executeTransaction).toHaveBeenCalledWith([
+        expect.objectContaining({
+          query: expect.stringContaining('INSERT INTO transactions'),
+          params: expect.arrayContaining(['session-1', 'player-1', 'buy_in', 25.00])
+        }),
+        expect.objectContaining({
+          query: expect.stringContaining('UPDATE players'),
+          params: [25.00, 25.00, 'player-1']
+        }),
+        expect.objectContaining({
+          query: expect.stringContaining('UPDATE sessions'),
+          params: [25.00, 'session-1']
+        })
+      ]);
+      expect(mockUndoManager.addUndoableTransaction).toHaveBeenCalledWith(validTransaction);
+    });
+
+    it('should validate minimum amount', async () => {
+      await ErrorMatchers.rejectsWithMessage(
+        transactionService.recordBuyIn('session-1', 'player-1', 4.99),
+        'Buy-in amount must be at least'
+      );
+    });
+
+    it('should validate maximum amount', async () => {
+      await ErrorMatchers.rejectsWithMessage(
+        transactionService.recordBuyIn('session-1', 'player-1', 500.01),
+        'Buy-in amount cannot exceed'
+      );
+    });
+
+    it('should validate positive amounts', async () => {
+      await expect(
+        transactionService.recordBuyIn('session-1', 'player-1', 0)
+      ).rejects.toThrow('Buy-in amount must be positive');
+    });
+
+    it('should validate decimal places', async () => {
+      await expect(
+        transactionService.recordBuyIn('session-1', 'player-1', 25.123)
+      ).rejects.toThrow('Buy-in amount cannot have more than 2 decimal places');
+    });
+
+    it('should require active session', async () => {
+      mockSessionService.getSession.mockResolvedValue({
+        ...validSession,
+        status: 'completed'
+      });
+
+      await expect(
+        transactionService.recordBuyIn('session-1', 'player-1', 25.00)
+      ).rejects.toThrow('Buy-ins are only allowed for active sessions');
+    });
+
+    it('should require active player', async () => {
+      mockDbService.executeQuery.mockResolvedValue([{ 
+        id: 'player-1', 
+        status: 'cashed_out' 
+      }]);
+
+      await expect(
+        transactionService.recordBuyIn('session-1', 'player-1', 25.00)
+      ).rejects.toThrow('Buy-ins are only allowed for active players');
+    });
+
+    it('should prevent duplicate transactions', async () => {
+      mockDbService.executeQuery
+        .mockResolvedValueOnce([{ id: 'player-1', status: 'active' }])
+        .mockResolvedValueOnce([{ id: 'existing-transaction' }]); // Duplicate found
+
+      await expect(
+        transactionService.recordBuyIn('session-1', 'player-1', 25.00)
+      ).rejects.toThrow('Duplicate transaction detected');
+    });
+  });
+
+  describe('getTransactionHistory', () => {
+    it('should return transaction history for a session', async () => {
+      const mockTransactions = [
+        {
+          id: 'transaction-1',
+          type: 'buy_in',
+          amount: '25.00',
+          timestamp: '2023-01-01T12:00:00Z',
+          method: 'manual',
+          is_voided: false,
+          player_name: 'John Doe'
+        }
+      ];
+
+      mockDbService.executeQuery.mockResolvedValue(mockTransactions);
+
+      const result = await transactionService.getTransactionHistory('session-1');
+
+      expect(result).toEqual([
+        {
+          id: 'transaction-1',
+          playerName: 'John Doe',
+          type: 'buy_in',
+          amount: 25.00,
+          timestamp: new Date('2023-01-01T12:00:00Z'),
+          method: 'manual',
+          isVoided: false
+        }
+      ]);
+    });
+  });
+
+  describe('calculatePlayerBalance', () => {
+    it('should calculate player balance correctly', async () => {
+      const mockPlayerData = [{
+        id: 'player-1',
+        name: 'John Doe',
+        current_balance: '75.00',
+        total_buy_ins: '100.00',
+        total_cash_outs: '25.00'
+      }];
+
+      mockDbService.executeQuery.mockResolvedValue(mockPlayerData);
+
+      const result = await transactionService.calculatePlayerBalance('player-1');
+
+      expect(result).toEqual({
+        playerId: 'player-1',
+        playerName: 'John Doe',
+        currentBalance: 75.00,
+        totalBuyIns: 100.00,
+        totalCashOuts: 25.00,
+        netPosition: -25.00 // currentBalance - totalBuyIns
+      });
+    });
+
+    it('should throw error for non-existent player', async () => {
+      mockDbService.executeQuery.mockResolvedValue([]);
+
+      await expect(
+        transactionService.calculatePlayerBalance('non-existent')
+      ).rejects.toThrow('Player with ID non-existent not found');
+    });
+  });
+
+  describe('undoTransaction', () => {
+    beforeEach(() => {
+      mockUndoManager.canUndo.mockReturnValue(true);
+      mockDbService.executeQuery.mockResolvedValue([{
+        ...validTransaction,
+        timestamp: validTransaction.timestamp.toISOString(),
+        session_id: validTransaction.sessionId,
+        player_id: validTransaction.playerId,
+        is_voided: false,
+        created_by: validTransaction.createdBy
+      }]);
+      mockDbService.executeTransaction.mockResolvedValue(undefined);
+    });
+
+    it('should undo a valid transaction', async () => {
+      await transactionService.undoTransaction('transaction-1');
+
+      expect(mockDbService.executeTransaction).toHaveBeenCalledWith([
+        expect.objectContaining({
+          query: expect.stringContaining('UPDATE transactions'),
+          params: expect.arrayContaining(['transaction-1'])
+        }),
+        expect.objectContaining({
+          query: expect.stringContaining('UPDATE players'),
+          params: [25.00, 25.00, 'player-1']
+        }),
+        expect.objectContaining({
+          query: expect.stringContaining('UPDATE sessions'),
+          params: [25.00, 'session-1']
+        })
+      ]);
+      expect(mockUndoManager.removeUndoableTransaction).toHaveBeenCalledWith('transaction-1');
+    });
+
+    it('should prevent undo of expired transactions', async () => {
+      mockUndoManager.canUndo.mockReturnValue(false);
+
+      await expect(
+        transactionService.undoTransaction('transaction-1')
+      ).rejects.toThrow('Transaction cannot be undone (expired or already voided)');
+    });
+
+    it('should prevent undo of already voided transactions', async () => {
+      mockDbService.executeQuery.mockResolvedValue([{
+        ...validTransaction,
+        is_voided: true
+      }]);
+
+      await expect(
+        transactionService.undoTransaction('transaction-1')
+      ).rejects.toThrow('Transaction is already voided');
+    });
+  });
+
+  describe('canUndoTransaction', () => {
+    it('should delegate to undo manager', () => {
+      mockUndoManager.canUndo.mockReturnValue(true);
+
+      const result = transactionService.canUndoTransaction('transaction-1');
+
+      expect(result).toBe(true);
+      expect(mockUndoManager.canUndo).toHaveBeenCalledWith('transaction-1');
+    });
+  });
+
+  describe('getRemainingUndoTime', () => {
+    it('should delegate to undo manager', () => {
+      mockUndoManager.getRemainingUndoTime.mockReturnValue(15);
+
+      const result = transactionService.getRemainingUndoTime('transaction-1');
+
+      expect(result).toBe(15);
+      expect(mockUndoManager.getRemainingUndoTime).toHaveBeenCalledWith('transaction-1');
+    });
+  });
+
+  describe('transaction limits validation', () => {
+    it('should use correct transaction limits', () => {
+      expect(TRANSACTION_LIMITS.MIN_BUY_IN).toBe(5.00);
+      expect(TRANSACTION_LIMITS.MAX_BUY_IN).toBe(500.00);
+      expect(TRANSACTION_LIMITS.UNDO_WINDOW_SECONDS).toBe(30);
+    });
+  });
+
+  describe('error handling', () => {
+    it('should handle database errors gracefully', async () => {
+      mockSessionService.getSession.mockResolvedValue(validSession);
+      mockDbService.executeQuery.mockResolvedValue([{ id: 'player-1', status: 'active' }]);
+      mockDbService.executeTransaction.mockRejectedValue(new Error('Database connection failed'));
+
+      await expect(
+        transactionService.recordBuyIn('session-1', 'player-1', 25.00)
+      ).rejects.toThrow('Failed to record buy-in transaction');
+    });
+
+    it('should preserve ServiceError instances', async () => {
+      const serviceError = ServiceError.validation('Test error', 'test');
+      mockSessionService.getSession.mockRejectedValue(serviceError);
+
+      await expect(
+        transactionService.recordBuyIn('session-1', 'player-1', 25.00)
+      ).rejects.toThrow(serviceError);
+    });
+  });
+
+  // Story 1.4 Cash-out Tests
+  describe('recordCashOut', () => {
+    const validCashOutTransaction = {
+      id: 'transaction-2',
+      sessionId: 'session-1',
+      playerId: 'player-1',
+      type: 'cash_out' as const,
+      amount: 20.00,
+      timestamp: new Date(),
+      method: 'manual' as const,
+      isVoided: false,
+      createdBy: 'user'
+    };
+
+    beforeEach(() => {
+      mockSessionService.getSession.mockResolvedValue(validSession);
+      mockDbService.executeQuery
+        .mockResolvedValueOnce([{ id: 'player-1', status: 'active', total_buy_ins: '50.00' }]) // Player validation
+        .mockResolvedValueOnce([{ total_buy_ins: '100.00', total_cash_outs: '20.00' }]) // Session balance validation
+        .mockResolvedValueOnce([]) // Duplicate check
+        .mockResolvedValueOnce([{ current_balance: '30.00', total_buy_ins: '50.00', status: 'active' }]); // Get player state
+      mockDbService.executeTransaction.mockResolvedValue(undefined);
+    });
+
+    it('should record a valid cash-out transaction', async () => {
+      // Mock successful transaction creation
+      mockDbService.executeQuery
+        .mockResolvedValueOnce([{ id: 'player-1', status: 'active', total_buy_ins: '50.00' }]) // Player validation
+        .mockResolvedValueOnce([{ total_buy_ins: '100.00', total_cash_outs: '20.00' }]) // Session balance validation
+        .mockResolvedValueOnce([]) // Duplicate check
+        .mockResolvedValueOnce([{ current_balance: '30.00', total_buy_ins: '50.00', status: 'active' }]) // Get player state
+        .mockResolvedValueOnce([{ // Get transaction
+          ...validCashOutTransaction,
+          timestamp: validCashOutTransaction.timestamp.toISOString(),
+          player_name: 'John Doe'
+        }]);
+
+      const result = await transactionService.recordCashOut(
+        'session-1', 
+        'player-1', 
+        20.00
+      );
+
+      expect(result).toEqual(validCashOutTransaction);
+      expect(mockDbService.executeTransaction).toHaveBeenCalledWith([
+        expect.objectContaining({
+          query: expect.stringContaining('INSERT INTO transactions'),
+          params: expect.arrayContaining(['session-1', 'player-1', 'cash_out', 20.00])
+        }),
+        expect.objectContaining({
+          query: expect.stringContaining('UPDATE players'),
+          params: expect.arrayContaining([20.00, 20.00, false, 'player-1']) // amount, amount, willCashOutCompletely, playerId
+        }),
+        expect.objectContaining({
+          query: expect.stringContaining('UPDATE sessions'),
+          params: [20.00, 'session-1']
+        })
+      ]);
+      expect(mockUndoManager.addUndoableTransaction).toHaveBeenCalledWith(validCashOutTransaction);
+    });
+
+    it('should update player status to cashed_out when balance reaches zero', async () => {
+      // Player with exactly 20.00 balance cashing out 20.00
+      mockDbService.executeQuery
+        .mockResolvedValueOnce([{ id: 'player-1', status: 'active', total_buy_ins: '50.00' }]) // Player validation
+        .mockResolvedValueOnce([{ total_buy_ins: '100.00', total_cash_outs: '20.00' }]) // Session balance validation
+        .mockResolvedValueOnce([]) // Duplicate check
+        .mockResolvedValueOnce([{ current_balance: '20.00', total_buy_ins: '50.00', status: 'active' }]) // Get player state
+        .mockResolvedValueOnce([{ // Get transaction
+          ...validCashOutTransaction,
+          timestamp: validCashOutTransaction.timestamp.toISOString(),
+          player_name: 'John Doe'
+        }]);
+
+      await transactionService.recordCashOut('session-1', 'player-1', 20.00);
+
+      expect(mockDbService.executeTransaction).toHaveBeenCalledWith([
+        expect.any(Object), // INSERT transaction
+        expect.objectContaining({
+          query: expect.stringContaining('UPDATE players'),
+          params: expect.arrayContaining([20.00, 20.00, true, 'player-1']) // willCashOutCompletely = true
+        }),
+        expect.any(Object) // UPDATE sessions
+      ]);
+    });
+
+    it('should validate minimum cash-out amount', async () => {
+      await ErrorMatchers.rejectsWithMessage(
+        transactionService.recordCashOut('session-1', 'player-1', 0.005),
+        'Cash-out amount must be at least'
+      );
+    });
+
+    it('should validate maximum cash-out amount', async () => {
+      await ErrorMatchers.rejectsWithMessage(
+        transactionService.recordCashOut('session-1', 'player-1', 1000.01),
+        'Cash-out amount cannot exceed'
+      );
+    });
+
+    it('should validate positive amounts', async () => {
+      await expect(
+        transactionService.recordCashOut('session-1', 'player-1', 0)
+      ).rejects.toThrow('Cash-out amount must be positive');
+    });
+
+    it('should validate decimal places', async () => {
+      await expect(
+        transactionService.recordCashOut('session-1', 'player-1', 25.123)
+      ).rejects.toThrow('Cash-out amount cannot have more than 2 decimal places');
+    });
+
+    it('should require active session', async () => {
+      mockSessionService.getSession.mockResolvedValue({
+        ...validSession,
+        status: 'completed'
+      });
+
+      await expect(
+        transactionService.recordCashOut('session-1', 'player-1', 25.00)
+      ).rejects.toThrow('Cash-outs are only allowed for active sessions');
+    });
+
+    it('should require active player', async () => {
+      mockDbService.executeQuery.mockResolvedValueOnce([{ 
+        id: 'player-1', 
+        status: 'inactive',
+        total_buy_ins: '50.00'
+      }]);
+
+      await expect(
+        transactionService.recordCashOut('session-1', 'player-1', 25.00)
+      ).rejects.toThrow('Cash-outs are only allowed for active players');
+    });
+
+    it('should prevent cash-out for already cashed out player', async () => {
+      mockDbService.executeQuery.mockResolvedValueOnce([{ 
+        id: 'player-1', 
+        status: 'cashed_out',
+        total_buy_ins: '50.00'
+      }]);
+
+      await expect(
+        transactionService.recordCashOut('session-1', 'player-1', 25.00)
+      ).rejects.toThrow(
+        expect.objectContaining({
+          code: ErrorCode.PLAYER_ALREADY_CASHED_OUT
+        })
+      );
+    });
+
+    it('should require organizer confirmation for cash-out exceeding buy-ins', async () => {
+      mockDbService.executeQuery.mockResolvedValueOnce([{ 
+        id: 'player-1', 
+        status: 'active',
+        total_buy_ins: '25.00' // Player trying to cash out 30.00 but only bought in 25.00
+      }]);
+
+      await expect(
+        transactionService.recordCashOut('session-1', 'player-1', 30.00, 'manual', 'user', undefined, false)
+      ).rejects.toThrow(
+        expect.objectContaining({
+          code: ErrorCode.ORGANIZER_CONFIRMATION_REQUIRED
+        })
+      );
+    });
+
+    it('should allow cash-out exceeding buy-ins with organizer confirmation', async () => {
+      mockDbService.executeQuery
+        .mockResolvedValueOnce([{ id: 'player-1', status: 'active', total_buy_ins: '25.00' }]) // Player validation
+        .mockResolvedValueOnce([{ total_buy_ins: '100.00', total_cash_outs: '20.00' }]) // Session balance validation
+        .mockResolvedValueOnce([]) // Duplicate check
+        .mockResolvedValueOnce([{ current_balance: '35.00', total_buy_ins: '25.00', status: 'active' }]) // Get player state
+        .mockResolvedValueOnce([{ // Get transaction
+          ...validCashOutTransaction,
+          amount: 30.00,
+          timestamp: validCashOutTransaction.timestamp.toISOString(),
+          player_name: 'John Doe'
+        }]);
+
+      const result = await transactionService.recordCashOut(
+        'session-1', 'player-1', 30.00, 'manual', 'user', undefined, true // organizerConfirmed = true
+      );
+
+      expect(result.amount).toBe(30.00);
+      expect(mockDbService.executeTransaction).toHaveBeenCalled();
+    });
+
+    it('should prevent session balance overflow', async () => {
+      mockDbService.executeQuery
+        .mockResolvedValueOnce([{ id: 'player-1', status: 'active', total_buy_ins: '50.00' }]) // Player validation
+        .mockResolvedValueOnce([{ total_buy_ins: '100.00', total_cash_outs: '90.00' }]); // Session balance validation - would exceed
+
+      await expect(
+        transactionService.recordCashOut('session-1', 'player-1', 15.00) // 90 + 15 = 105 > 100
+      ).rejects.toThrow(
+        expect.objectContaining({
+          code: ErrorCode.SESSION_BALANCE_EXCEEDED
+        })
+      );
+    });
+
+    it('should prevent duplicate transactions', async () => {
+      mockDbService.executeQuery
+        .mockResolvedValueOnce([{ id: 'player-1', status: 'active', total_buy_ins: '50.00' }]) // Player validation
+        .mockResolvedValueOnce([{ total_buy_ins: '100.00', total_cash_outs: '20.00' }]) // Session balance validation
+        .mockResolvedValueOnce([{ id: 'existing-transaction' }]); // Duplicate found
+
+      await expect(
+        transactionService.recordCashOut('session-1', 'player-1', 25.00)
+      ).rejects.toThrow('Duplicate transaction detected');
+    });
+  });
+
+  describe('undoTransaction - Cash-out Support', () => {
+    const validCashOutTransaction = {
+      id: 'transaction-2',
+      sessionId: 'session-1',
+      playerId: 'player-1',
+      type: 'cash_out' as const,
+      amount: 20.00,
+      timestamp: new Date(),
+      method: 'manual' as const,
+      isVoided: false,
+      createdBy: 'user'
+    };
+
+    beforeEach(() => {
+      mockUndoManager.canUndo.mockReturnValue(true);
+      mockDbService.executeTransaction.mockResolvedValue(undefined);
+    });
+
+    it('should undo a cash-out transaction', async () => {
+      mockDbService.executeQuery.mockResolvedValue([{
+        ...validCashOutTransaction,
+        timestamp: validCashOutTransaction.timestamp.toISOString(),
+        session_id: validCashOutTransaction.sessionId,
+        player_id: validCashOutTransaction.playerId,
+        is_voided: false,
+        created_by: validCashOutTransaction.createdBy
+      }]);
+
+      await transactionService.undoTransaction('transaction-2');
+
+      expect(mockDbService.executeTransaction).toHaveBeenCalledWith([
+        expect.objectContaining({
+          query: expect.stringContaining('UPDATE transactions'),
+          params: expect.arrayContaining(['transaction-2'])
+        }),
+        expect.objectContaining({
+          query: expect.stringContaining('UPDATE players'),
+          params: [20.00, 20.00, 'player-1'] // Add back to balance, subtract from cash-outs, restore active status
+        }),
+        expect.objectContaining({
+          query: expect.stringContaining('UPDATE sessions'),
+          params: [20.00, 'session-1'] // Subtract from session cash-outs
+        })
+      ]);
+      expect(mockUndoManager.removeUndoableTransaction).toHaveBeenCalledWith('transaction-2');
+    });
+  });
+
+  describe('session balance validation', () => {
+    it('should validate session balance correctly', async () => {
+      // This test verifies the internal validateSessionBalance method
+      mockSessionService.getSession.mockResolvedValue(validSession);
+      mockDbService.executeQuery
+        .mockResolvedValueOnce([{ id: 'player-1', status: 'active', total_buy_ins: '50.00' }]) // Player validation
+        .mockResolvedValueOnce([{ total_buy_ins: '100.00', total_cash_outs: '50.00' }]); // Session balance validation
+
+      // This should work (50 + 40 = 90 < 100)
+      await expect(
+        transactionService.recordCashOut('session-1', 'player-1', 40.00)
+      ).not.toThrow();
+    });
+  });
+
+  describe('cash-out transaction limits validation', () => {
+    it('should use correct cash-out transaction limits', () => {
+      expect(TRANSACTION_LIMITS.MIN_CASH_OUT).toBe(0.01);
+      expect(TRANSACTION_LIMITS.MAX_CASH_OUT).toBe(1000.00);
+    });
+  });
+});

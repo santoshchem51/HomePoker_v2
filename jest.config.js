@@ -27,9 +27,9 @@ module.exports = {
     '^.+\\.(js|jsx|ts|tsx)$': ['babel-jest', { presets: ['@react-native/babel-preset'] }],
   },
   
-  // Transform ignore patterns
+  // Transform ignore patterns - updated to include all necessary RN packages
   transformIgnorePatterns: [
-    'node_modules/(?!(react-native|@react-native|react-native-sqlite-storage|react-native-gesture-handler|@react-native-voice)/)',
+    'node_modules/(?!(react-native|@react-native|react-native-sqlite-storage|react-native-gesture-handler|@react-native-voice|react-native-qrcode-svg|react-native-fs|@react-native-clipboard|@react-native-picker|@react-native-async-storage)/)',
   ],
   
   // Setup files
@@ -38,36 +38,13 @@ module.exports = {
   ],
   
   // Coverage configuration
-  collectCoverage: false, // Enable only when needed
+  collectCoverage: false,
   collectCoverageFrom: [
     'src/**/*.{js,jsx,ts,tsx}',
     '!src/**/*.d.ts',
-    '!src/**/index.{js,ts}', // Exclude index files
-    '!src/**/*.stories.{js,jsx,ts,tsx}', // Exclude Storybook files
+    '!src/**/index.{js,ts}',
+    '!src/**/*.stories.{js,jsx,ts,tsx}',
   ],
-  
-  // Coverage thresholds (from story requirements) - disabled for initial setup
-  // coverageThreshold: {
-  //   global: {
-  //     statements: 85,
-  //     branches: 85,
-  //     functions: 85,
-  //     lines: 85,
-  //   },
-  //   // Critical financial paths require higher coverage
-  //   './src/services/': {
-  //     statements: 95,
-  //     branches: 95,
-  //     functions: 95,
-  //     lines: 95,
-  //   },
-  //   './src/utils/': {
-  //     statements: 90,
-  //     branches: 90,
-  //     functions: 90,
-  //     lines: 90,
-  //   },
-  // },
   
   // Coverage reporting
   coverageReporters: [
@@ -80,7 +57,7 @@ module.exports = {
   // Verbose output for debugging
   verbose: true,
   
-  // Test timeout (increased for database operations)
+  // Test timeout - increased to 30s to prevent timeout errors
   testTimeout: 30000,
   
   // Clear mocks between tests
@@ -88,4 +65,12 @@ module.exports = {
   
   // Restore mocks after each test
   restoreMocks: true,
+  
+  // Disable fake timers globally
+  fakeTimers: {
+    enableGlobally: false,
+  },
+  
+  // Max workers - use 50% of available CPUs
+  maxWorkers: '50%',
 };

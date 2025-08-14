@@ -81,7 +81,7 @@ export const WhatsAppShare: React.FC<WhatsAppShareProps> = ({
       const message = await whatsAppService.generateSessionMessage(sessionId, format);
       
       // Attempt to share via WhatsApp
-      const result = await whatsAppService.shareToWhatsApp(message);
+      const result = await whatsAppService.shareWhatsAppMessage(message);
       
       // Handle result
       if (result.success) {
