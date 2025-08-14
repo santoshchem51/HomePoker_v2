@@ -10,6 +10,11 @@ import { TransactionService } from '@/services/core/TransactionService';
 import { PerformanceMonitor } from '@/services/monitoring/PerformanceMonitor';
 import { ServiceMocks, DataFactories } from '../../mock-factories';
 
+// Mock the DatabaseService module to allow singleton mocking
+jest.mock('@/services/infrastructure/DatabaseService');
+jest.mock('@/services/core/SessionService');
+jest.mock('@/services/core/TransactionService');
+
 describe('Memory Leak Detection and Prevention', () => {
   let databaseService: DatabaseService;
   let sessionService: SessionService;
@@ -28,9 +33,16 @@ describe('Memory Leak Detection and Prevention', () => {
   });
 
   beforeEach(async () => {
-    databaseService = ServiceMocks.createDatabaseService();
-    sessionService = new SessionService(databaseService);
-    transactionService = new TransactionService(databaseService);
+    // Create mock database service
+    const mockDatabase = ServiceMocks.createDatabaseService();
+    
+    // Mock the singleton getInstance to return our mock
+    jest.spyOn(DatabaseService, 'getInstance').mockReturnValue(mockDatabase);
+    
+    // Get singleton instances that will use our mocked database
+    databaseService = mockDatabase;
+    sessionService = SessionService.getInstance();
+    transactionService = TransactionService.getInstance();
     performanceMonitor = new PerformanceMonitor();
     
     await databaseService.initialize();
@@ -43,6 +55,14 @@ describe('Memory Leak Detection and Prevention', () => {
 
   afterEach(async () => {
     await databaseService.close();
+    
+    // Reset singleton instances to prevent test interference
+    jest.clearAllMocks();
+    jest.restoreAllMocks();
+    
+    // Clear singleton instances (careful - this resets the service state)
+    (SessionService as any).instance = null;
+    (TransactionService as any).instance = null;
     
     // Force garbage collection after each test
     if (global.gc) {
@@ -289,8 +309,11 @@ describe('Memory Leak Detection and Prevention', () => {
         const db = ServiceMocks.createDatabaseService();
         await db.initialize();
         
-        const sessionSvc = new SessionService(db);
-        const transactionSvc = new TransactionService(db);
+        // Mock singleton for this iteration
+        jest.spyOn(DatabaseService, 'getInstance').mockReturnValue(db);
+        
+        const sessionSvc = SessionService.getInstance();
+        const transactionSvc = TransactionService.getInstance();
         
         services.push({
           database: db,

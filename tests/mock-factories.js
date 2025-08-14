@@ -15,7 +15,15 @@ export const ServiceMocks = {
   createDatabaseService(overrides = {}) {
     const baseMock = {
       // Core database operations
-      executeQuery: jest.fn(() => Promise.resolve([])),
+      executeQuery: jest.fn(() => Promise.resolve({
+        rows: { 
+          length: 0, 
+          item: jest.fn(() => ({})),
+          raw: jest.fn(() => [])
+        },
+        rowsAffected: 0,
+        insertId: 0
+      })),
       executeTransaction: jest.fn((callback) => {
         const tx = {
           executeSql: jest.fn((sql, params, success) => {
@@ -34,6 +42,19 @@ export const ServiceMocks = {
         };
         return Promise.resolve(callback ? callback(tx) : undefined);
       }),
+      
+      // CRITICAL: Lifecycle methods expected by tests
+      initialize: jest.fn(() => Promise.resolve()),
+      close: jest.fn(() => Promise.resolve()),
+      
+      // Connection monitoring methods
+      getActiveConnectionCount: jest.fn(() => Promise.resolve(1)),
+      getConnectionPoolStats: jest.fn(() => Promise.resolve({
+        totalConnections: 1,
+        activeConnections: 1,
+        idleConnections: 0,
+        preparedStatements: 0
+      })),
       
       // Player operations
       getPlayers: jest.fn(() => Promise.resolve([])),
@@ -60,6 +81,7 @@ export const ServiceMocks = {
         tablesCount: 3,
         status: 'healthy'
       })),
+      // Legacy method names for backward compatibility
       initializeDatabase: jest.fn(() => Promise.resolve()),
       closeDatabase: jest.fn(() => Promise.resolve()),
       
