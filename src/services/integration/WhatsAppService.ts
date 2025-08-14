@@ -358,33 +358,46 @@ export class WhatsAppService {
   }
 
   /**
-   * Format summary message (compact format)
-   * AC: 2, 7
+   * Format summary message (compact format) - Enhanced for Story 4.2
+   * AC: 1, 2, 3, 4, 5, 6 - Mobile-optimized with emoji formatting
    */
   private formatSummaryMessage(data: SettlementSummary): string {
     const durationFormatted = this.formatDuration(data.duration);
     
-    let message = `🎯 Poker Night Results - ${data.sessionName}\n`;
-    message += `💰 Total Pot: $${data.totalPot.toFixed(2)} | ⏱️ Duration: ${durationFormatted}\n\n`;
+    // Header with session info (AC: 3, 4)
+    let message = `🎯 **POKER NIGHT RESULTS**\n`;
+    message += `🏠 ${data.sessionName}\n`;
+    message += `💰 Total Pot: $${CalculationUtils.formatCurrency(data.totalPot)}\n`;
+    message += `⏱️ Duration: ${durationFormatted}\n`;
+    message += `👥 Players: ${data.playerSummaries.length}\n`;
+    message += `━━━━━━━━━━━━━━━━━━━━\n\n`;
 
     if (data.settlements.length > 0) {
-      message += '💸 Settlement Summary:\n';
+      // Settlement instructions (AC: 2, 4)
+      message += '💸 **WHO PAYS WHOM:**\n';
       data.settlements.forEach(settlement => {
-        message += `• ${settlement.fromPlayerName} pays ${settlement.toPlayerName}: $${settlement.amount.toFixed(2)}\n`;
+        const amount = CalculationUtils.formatCurrency(settlement.amount);
+        message += `💵 ${settlement.fromPlayerName} → ${settlement.toPlayerName}\n`;
+        message += `    Amount: $${amount}\n\n`;
       });
       
-      message += `• Final: `;
-      const finalPositions = data.playerSummaries
-        .filter(p => p.netPosition !== 0)
-        .sort((a, b) => b.netPosition - a.netPosition)
-        .map(p => `${p.playerName} ${p.netPosition > 0 ? '+' : ''}$${p.netPosition.toFixed(0)}`)
-        .join(', ');
-      message += finalPositions + '\n';
+      // Final positions summary (AC: 2, 5)
+      message += '📊 **FINAL POSITIONS:**\n';
+      const sortedPlayers = data.playerSummaries
+        .sort((a, b) => b.netPosition - a.netPosition);
+        
+      sortedPlayers.forEach(player => {
+        const winnerIcon = player.netPosition > 0 ? '🟢' : player.netPosition < 0 ? '🔴' : '⚪';
+        const sign = player.netPosition >= 0 ? '+' : '';
+        message += `${winnerIcon} ${player.playerName}: ${sign}$${CalculationUtils.formatCurrency(Math.abs(player.netPosition))}\n`;
+      });
     } else {
-      message += '🤝 No settlements needed - everyone broke even!\n';
+      message += '🤝 **PERFECT BALANCE!**\n';
+      message += 'No settlements needed - everyone broke even!\n';
     }
 
-    message += '\n🔗 Shared via PokePot';
+    message += '\n━━━━━━━━━━━━━━━━━━━━\n';
+    message += '🔗 Shared via PokePot App';
     
     return message;
   }

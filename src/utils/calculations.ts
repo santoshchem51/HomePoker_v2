@@ -39,4 +39,12 @@ export class CalculationUtils {
   public static isValidCurrencyAmount(amount: number): boolean {
     return Number.isInteger(amount * 100);
   }
+
+  /**
+   * Format currency amount for display
+   * Story 4.2: AC 4, 5 - Enhanced formatting for mobile readability
+   */
+  public static formatCurrency(amount: number): string {
+    return Math.abs(amount).toFixed(2);
+  }
 }

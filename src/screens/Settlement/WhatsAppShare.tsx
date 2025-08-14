@@ -22,13 +22,14 @@ import { ShareResult } from '../../types/whatsapp';
 
 // Constants to avoid recreation on every render
 const SHARE_BUTTON_TEXT = '📱 Share to WhatsApp';
-const PREVIEW_BUTTON_TEXT = '👀 Preview Message';
-const ALTERNATIVE_BUTTONS = [
-  { key: 'copy', text: '📋 Copy' },
-  { key: 'share', text: '📤 Share' },
-  { key: 'sms', text: '💬 SMS' },
-  { key: 'email', text: '📧 Email' },
-] as const;
+// Placeholder constants for future implementation
+// const PREVIEW_BUTTON_TEXT = '👀 Preview Message';
+// const ALTERNATIVE_BUTTONS = [
+//   { key: 'copy', text: '📋 Copy' },
+//   { key: 'share', text: '📤 Share' },
+//   { key: 'sms', text: '💬 SMS' },
+//   { key: 'email', text: '📧 Email' },
+// ] as const;
 
 interface WhatsAppShareProps {
   settlement: OptimizedSettlement;
