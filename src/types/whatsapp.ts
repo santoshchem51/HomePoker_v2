@@ -3,12 +3,13 @@
  * Defines message formats, sharing results, and integration interfaces
  */
 
-export type MessageFormat = 'summary' | 'detailed';
+export type MessageFormat = 'summary' | 'detailed' | 'quick' | 'text-only' | 'data-export';
 
 export interface ShareResult {
   success: boolean;
   method: 'whatsapp' | 'clipboard' | 'other';
   error?: string;
+  message?: string;
 }
 
 export interface WhatsAppMessage {
@@ -49,6 +50,33 @@ export interface MessageQueueItem {
   retryCount: number;
   createdAt: Date;
   lastAttempt?: Date;
+}
+
+export interface SessionExport {
+  sessionId: string;
+  sessionName: string;
+  exportTimestamp: Date;
+  sessionData: {
+    startTime: Date;
+    endTime?: Date;
+    totalPot: number;
+    playerCount: number;
+  };
+  players: Array<{
+    id: string;
+    name: string;
+    totalBuyIns: number;
+    totalCashOuts: number;
+    netPosition: number;
+  }>;
+  transactions: Array<{
+    id: string;
+    playerId: string;
+    type: 'buy-in' | 'cash-out';
+    amount: number;
+    timestamp: Date;
+  }>;
+  settlements: Settlement[];
 }
 
 // WhatsApp URL scheme constants

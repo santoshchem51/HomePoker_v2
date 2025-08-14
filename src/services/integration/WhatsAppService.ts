@@ -13,6 +13,7 @@ import {
   SettlementSummary,
   PlayerSettlement,
   Settlement,
+  SessionExport,
   WHATSAPP_URL_SCHEME,
   WHATSAPP_MESSAGE_LIMIT
 } from '../../types/whatsapp';
@@ -50,9 +51,7 @@ export class WhatsAppService {
     try {
       const settlementData = await this.generateSettlementData(sessionId);
       
-      const content = format === 'summary' 
-        ? this.formatSummaryMessage(settlementData)
-        : this.formatDetailedMessage(settlementData);
+      const content = this.getFormattedContent(settlementData, format);
 
       const message: WhatsAppMessage = {
         content,
@@ -437,6 +436,109 @@ export class WhatsAppService {
   }
 
   /**
+   * Get formatted content based on message format - Story 4.3
+   * Supports all format types including new quick, text-only, and data-export
+   */
+  private getFormattedContent(data: SettlementSummary, format: MessageFormat): string {
+    switch (format) {
+      case 'summary':
+        return this.formatSummaryMessage(data);
+      case 'detailed':
+        return this.formatDetailedMessage(data);
+      case 'quick':
+        return this.formatQuickSummary(data);
+      case 'text-only':
+        return this.formatTextOnly(data);
+      case 'data-export':
+        return this.formatDataExport(data);
+      default:
+        return this.formatSummaryMessage(data);
+    }
+  }
+
+  /**
+   * Format quick summary (settlements only) - Story 4.3 AC 1
+   */
+  private formatQuickSummary(data: SettlementSummary): string {
+    let message = `Poker Settlement - ${data.sessionName}\n`;
+    
+    if (data.settlements.length > 0) {
+      message += 'Payments needed:\n';
+      data.settlements.forEach(settlement => {
+        const amount = CalculationUtils.formatCurrency(settlement.amount);
+        message += `${settlement.fromPlayerName} → ${settlement.toPlayerName}: $${amount}\n`;
+      });
+    } else {
+      message += 'All players broke even - no payments needed\n';
+    }
+    
+    return message.trim();
+  }
+
+  /**
+   * Format text-only version (accessibility) - Story 4.3 AC 4
+   */
+  private formatTextOnly(data: SettlementSummary): string {
+    const durationFormatted = this.formatDuration(data.duration);
+    
+    let message = `POKER SESSION RESULTS\n`;
+    message += `Session: ${data.sessionName}\n`;
+    message += `Total Pot: $${CalculationUtils.formatCurrency(data.totalPot)}\n`;
+    message += `Duration: ${durationFormatted}\n`;
+    message += `Players: ${data.playerSummaries.length}\n\n`;
+
+    if (data.settlements.length > 0) {
+      message += 'SETTLEMENTS:\n';
+      data.settlements.forEach(settlement => {
+        const amount = CalculationUtils.formatCurrency(settlement.amount);
+        message += `${settlement.fromPlayerName} pays ${settlement.toPlayerName} $${amount}\n`;
+      });
+      
+      message += '\nFINAL POSITIONS:\n';
+      const sortedPlayers = data.playerSummaries
+        .sort((a, b) => b.netPosition - a.netPosition);
+        
+      sortedPlayers.forEach(player => {
+        const sign = player.netPosition >= 0 ? '+' : '';
+        message += `${player.playerName}: ${sign}$${CalculationUtils.formatCurrency(Math.abs(player.netPosition))}\n`;
+      });
+    } else {
+      message += 'RESULT: All players broke even\n';
+    }
+
+    message += '\nShared via PokePot App';
+    return message;
+  }
+
+  /**
+   * Format structured data export - Story 4.3 AC 6
+   */
+  private formatDataExport(data: SettlementSummary): string {
+    const exportData = {
+      sessionName: data.sessionName,
+      exportTimestamp: new Date().toISOString(),
+      summary: {
+        totalPot: data.totalPot,
+        duration: data.duration,
+        playerCount: data.playerSummaries.length
+      },
+      players: data.playerSummaries.map(p => ({
+        name: p.playerName,
+        buyIns: p.totalBuyIns,
+        cashOuts: p.totalCashOuts,
+        netPosition: p.netPosition
+      })),
+      settlements: data.settlements.map(s => ({
+        from: s.fromPlayerName,
+        to: s.toPlayerName,
+        amount: s.amount
+      }))
+    };
+    
+    return JSON.stringify(exportData, null, 2);
+  }
+
+  /**
    * Format duration in human-readable format
    */
   private formatDuration(minutes: number): string {
@@ -449,6 +551,121 @@ export class WhatsAppService {
       return `${hours}h`;
     } else {
       return `${hours}h ${mins}m`;
+    }
+  }
+
+  /**
+   * Enhanced clipboard functionality - Story 4.3 AC 5
+   * Copy content to clipboard with format-specific notifications
+   */
+  public async copyToClipboard(content: string, format: MessageFormat): Promise<ShareResult> {
+    try {
+      await Clipboard.setString(content);
+      
+      const formatLabels = {
+        'quick': 'Quick Settlement Summary',
+        'summary': 'Settlement Summary',
+        'detailed': 'Detailed Session Report',
+        'text-only': 'Text-Only Format',
+        'data-export': 'Session Data Export'
+      };
+      
+      const formatLabel = formatLabels[format] || 'Message';
+      
+      return {
+        success: true,
+        method: 'clipboard',
+        message: `${formatLabel} copied to clipboard successfully`
+      };
+    } catch (error) {
+      throw new ServiceError(
+        'CLIPBOARD_COPY_FAILED',
+        'Failed to copy to clipboard',
+        { format, error: error instanceof Error ? error.message : String(error) }
+      );
+    }
+  }
+
+  /**
+   * Export session data - Story 4.3 AC 6
+   * Generate complete session export with structured data
+   */
+  public async exportSessionData(sessionId: string): Promise<SessionExport> {
+    try {
+      const settlementData = await this.generateSettlementData(sessionId);
+      
+      // Get session details from database
+      const session = await this.dbService.getSession(sessionId);
+      if (!session) {
+        throw new ServiceError('SESSION_NOT_FOUND', 'Session not found for export', { sessionId });
+      }
+
+      // Get transaction details
+      const transactions = await this.dbService.getTransactions(sessionId);
+      
+      const exportData: SessionExport = {
+        sessionId,
+        sessionName: settlementData.sessionName,
+        exportTimestamp: new Date(),
+        sessionData: {
+          startTime: session.startedAt || session.createdAt,
+          endTime: session.completedAt,
+          totalPot: settlementData.totalPot,
+          playerCount: settlementData.playerSummaries.length
+        },
+        players: settlementData.playerSummaries.map(p => ({
+          id: p.playerId,
+          name: p.playerName,
+          totalBuyIns: p.totalBuyIns,
+          totalCashOuts: p.totalCashOuts,
+          netPosition: p.netPosition
+        })),
+        transactions: transactions.map((t: Transaction) => ({
+          id: t.id,
+          playerId: t.playerId,
+          type: t.type as 'buy-in' | 'cash-out',
+          amount: t.amount,
+          timestamp: t.timestamp
+        })),
+        settlements: settlementData.settlements
+      };
+
+      return exportData;
+    } catch (error) {
+      if (error instanceof ServiceError) {
+        throw error;
+      }
+      throw new ServiceError(
+        'SESSION_EXPORT_FAILED',
+        'Failed to export session data',
+        { sessionId, error: error instanceof Error ? error.message : String(error) }
+      );
+    }
+  }
+
+  /**
+   * Generate settlement image for sharing - Story 4.3 AC 3
+   * Note: Placeholder implementation - requires react-native-view-shot library
+   */
+  public async generateSettlementImage(sessionId: string): Promise<string> {
+    try {
+      // TODO: Implement image generation when react-native-view-shot is available
+      // This would capture a styled view of the settlement summary
+      
+      throw new ServiceError(
+        'IMAGE_EXPORT_NOT_IMPLEMENTED',
+        'Image export feature requires additional library setup. Use text formats instead.',
+        { sessionId, suggestion: 'Consider using detailed or text-only formats for sharing' }
+      );
+    } catch (error) {
+      if (error instanceof ServiceError) {
+        throw error;
+      }
+      throw new ServiceError(
+        'IMAGE_GENERATION_FAILED',
+        'Failed to generate settlement image',
+        { sessionId, error: error instanceof Error ? error.message : String(error) }
+      );
     }
   }
 }
