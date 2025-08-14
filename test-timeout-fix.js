@@ -135,6 +135,7 @@ async function runTest(scenario) {
     const appStartupTime = Date.now() - appStartTime;
     
     crashReporting.reportDatabaseInitializationTime(dbInitTime, false);
+    crashReporting.reportAppStartupTime(appStartupTime);
     crashReporting.reportError(error, 'database_initialization', { retryCount: 0 });
     
     if (error.message.includes('DATABASE_INIT_TIMEOUT')) {

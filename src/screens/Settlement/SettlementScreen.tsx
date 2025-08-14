@@ -4,7 +4,7 @@
  * Implements AC: 1 - Settlement completion screen with WhatsApp sharing
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -39,12 +39,7 @@ export const SettlementScreen: React.FC<SettlementScreenProps> = ({
 
   const settlementService = SettlementService.getInstance();
 
-  // Load settlement data
-  useEffect(() => {
-    loadSettlement();
-  }, [sessionId]);
-
-  const loadSettlement = async () => {
+  const loadSettlement = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
@@ -59,7 +54,12 @@ export const SettlementScreen: React.FC<SettlementScreenProps> = ({
     } finally {
       setLoading(false);
     }
-  };
+  }, [sessionId, settlementService]);
+
+  // Load settlement data
+  useEffect(() => {
+    loadSettlement();
+  }, [loadSettlement]);
 
   const handleShareComplete = (result: ShareResult) => {
     if (result.success) {

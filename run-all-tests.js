@@ -51,8 +51,8 @@ async function runTest(file) {
     });
     
     let output = '';
-    test.stdout.on('data', (data) => output += data);
-    test.stderr.on('data', (data) => output += data);
+    test.stdout.on('data', (data) => { output += data; });
+    test.stderr.on('data', (data) => { output += data; });
     
     test.on('close', (code) => {
       if (code === 0) {

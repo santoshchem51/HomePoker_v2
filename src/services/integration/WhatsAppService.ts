@@ -773,22 +773,13 @@ export class WhatsAppService {
    * Initialize with default preferences if none exist
    */
   private loadSharingPreferences(): SharingPreferences {
-    try {
-      // In a real implementation, this would load from AsyncStorage or similar
-      // For now, return default preferences
-      return {
-        defaultFormat: 'summary',
-        recentChats: [],
-        quickShareEnabled: true
-      };
-    } catch (error) {
-      // Return defaults if loading fails
-      return {
-        defaultFormat: 'summary' as MessageFormat,
-        recentChats: [],
-        quickShareEnabled: true
-      };
-    }
+    // In a real implementation, this would load from AsyncStorage or similar
+    // For now, return default preferences
+    return {
+      defaultFormat: 'summary',
+      recentChats: [],
+      quickShareEnabled: true
+    };
   }
 
   /**

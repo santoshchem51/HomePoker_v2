@@ -12,19 +12,21 @@ export class PerformanceMonitoring {
     console.log(`Metric: ${name} = ${value}`);
   }
 
-  static setEnabled(enabled: boolean): void {
+  static setEnabled(_enabled: boolean): void {
     // Mock implementation
   }
 }
 
 export class PerformanceTrace {
-  constructor(private name: string) {}
+  constructor(_name: string) {
+    // Mock implementation - name parameter ignored
+  }
 
-  putAttribute(key: string, value: string): void {
+  putAttribute(_key: string, _value: string): void {
     // Mock implementation
   }
 
-  putMetric(key: string, value: number): void {
+  putMetric(_key: string, _value: number): void {
     // Mock implementation
   }
 

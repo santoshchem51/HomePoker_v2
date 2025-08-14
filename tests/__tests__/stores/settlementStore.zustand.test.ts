@@ -5,7 +5,7 @@
 
 import { useSettlementStore } from '../../../src/stores/settlementStore';
 import { SettlementService } from '../../../src/services/settlement/SettlementService';
-import { createTestStore, testStoreAction, createStoreMocks } from '../../zustand-testing';
+import { createTestStore, createStoreMocks } from '../../zustand-testing';
 
 // Mock the SettlementService
 jest.mock('../../../src/services/settlement/SettlementService');

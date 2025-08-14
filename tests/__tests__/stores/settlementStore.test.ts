@@ -16,6 +16,7 @@ import { EarlyCashOutRequest, EarlyCashOutResult, SettlementStatus } from '../..
 jest.mock('../../../src/services/settlement/SettlementService');
 const MockedSettlementService = SettlementService as jest.MockedClass<typeof SettlementService>;
 
+// eslint-disable-next-line jest/no-disabled-tests
 describe.skip('useSettlementStore', () => {
   let mockSettlementService: jest.Mocked<SettlementService>;
 
@@ -419,7 +420,7 @@ describe.skip('useSettlementStore', () => {
 
   describe('Store Persistence', () => {
     it('should only persist essential data', () => {
-      const { result } = renderHook(() => useSettlementStore());
+      renderHook(() => useSettlementStore());
 
       // Set various state
       act(() => {

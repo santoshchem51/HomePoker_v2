@@ -4,7 +4,7 @@
  * @format
  */
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { StatusBar, StyleSheet, useColorScheme, View, Text, TouchableOpacity } from 'react-native';
 import { DatabaseService } from './src/services/infrastructure/DatabaseService';
 import { CrashReportingService, setupGlobalErrorHandler } from './src/services/monitoring/CrashReportingService';
@@ -16,45 +16,7 @@ function App() {
   const [retryCount, setRetryCount] = useState(0);
   const [isRetrying, setIsRetrying] = useState(false);
 
-  useEffect(() => {
-    initializeAppWithMonitoring();
-  }, []);
-
-  const initializeAppWithMonitoring = async () => {
-    const startTime = Date.now();
-    const crashReporting = CrashReportingService.getInstance();
-    
-    try {
-      // Initialize crash reporting first
-      await crashReporting.initialize({
-        enabled: true,
-        provider: 'console',
-        minimumSeverity: 'info',
-        collectDeviceInfo: true,
-        collectUserInfo: false,
-      });
-      
-      // Setup global error handlers
-      setupGlobalErrorHandler(crashReporting);
-      
-      // Track app startup performance
-      await initializeApp();
-      
-      const appStartupTime = Date.now() - startTime;
-      crashReporting.reportAppStartupTime(appStartupTime);
-      
-    } catch (error) {
-      const appStartupTime = Date.now() - startTime;
-      crashReporting.reportError(
-        error instanceof Error ? error : new Error('Unknown app initialization error'),
-        'app_initialization',
-        { startupTime: appStartupTime }
-      );
-      throw error;
-    }
-  };
-
-  const initializeApp = async () => {
+  const initializeApp = useCallback(async () => {
     const crashReporting = CrashReportingService.getInstance();
     const dbStartTime = Date.now();
     
@@ -97,7 +59,45 @@ function App() {
       
       setInitError(userFriendlyMessage);
     }
-  };
+  }, [setRetryCount, setDbInitialized, setIsRetrying, setInitError, retryCount]);
+
+  const initializeAppWithMonitoring = useCallback(async () => {
+    const startTime = Date.now();
+    const crashReporting = CrashReportingService.getInstance();
+    
+    try {
+      // Initialize crash reporting first
+      await crashReporting.initialize({
+        enabled: true,
+        provider: 'console',
+        minimumSeverity: 'info',
+        collectDeviceInfo: true,
+        collectUserInfo: false,
+      });
+      
+      // Setup global error handlers
+      setupGlobalErrorHandler(crashReporting);
+      
+      // Track app startup performance
+      await initializeApp();
+      
+      const appStartupTime = Date.now() - startTime;
+      crashReporting.reportAppStartupTime(appStartupTime);
+      
+    } catch (error) {
+      const appStartupTime = Date.now() - startTime;
+      crashReporting.reportError(
+        error instanceof Error ? error : new Error('Unknown app initialization error'),
+        'app_initialization',
+        { startupTime: appStartupTime }
+      );
+      throw error;
+    }
+  }, [initializeApp]);
+
+  useEffect(() => {
+    initializeAppWithMonitoring();
+  }, [initializeAppWithMonitoring]);
 
   const handleRetry = async () => {
     setIsRetrying(true);
