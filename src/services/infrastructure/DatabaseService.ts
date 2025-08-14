@@ -91,7 +91,7 @@ export class DatabaseService {
     }
 
     this.isInitializing = true;
-    this.initPromise = this.performInitialization();
+    this.initPromise = this.performInitializationWithTimeout();
     
     try {
       await this.initPromise;
@@ -99,6 +99,27 @@ export class DatabaseService {
       this.isInitializing = false;
       this.initPromise = null;
     }
+  }
+
+  private async performInitializationWithTimeout(): Promise<void> {
+    return new Promise((resolve, reject) => {
+      // 5-second timeout to prevent app blocking
+      const timeoutId = setTimeout(() => {
+        this.database = null;
+        reject(new ServiceError('DATABASE_INIT_TIMEOUT', 'Database initialization timed out after 5 seconds'));
+      }, 5000);
+
+      this.performInitialization()
+        .then(() => {
+          clearTimeout(timeoutId);
+          resolve();
+        })
+        .catch((error) => {
+          clearTimeout(timeoutId);
+          this.database = null;
+          reject(error);
+        });
+    });
   }
 
   private async performInitialization(): Promise<void> {

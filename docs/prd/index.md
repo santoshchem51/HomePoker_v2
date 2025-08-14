@@ -65,8 +65,8 @@
       - [Acceptance Criteria](./epic-3-advanced-calculations-settlement-optimization.md#acceptance-criteria)
     - [Story 3.3: Settlement Validation and Verification](./epic-3-advanced-calculations-settlement-optimization.md#story-33-settlement-validation-and-verification)
       - [Acceptance Criteria](./epic-3-advanced-calculations-settlement-optimization.md#acceptance-criteria)
-    - [Story 3.4: Multi-Phase Settlement Support](./epic-3-advanced-calculations-settlement-optimization.md#story-34-multi-phase-settlement-support)
-      - [Acceptance Criteria](./epic-3-advanced-calculations-settlement-optimization.md#acceptance-criteria)
+    - ~~[Story 3.4: Multi-Phase Settlement Support](./epic-3-advanced-calculations-settlement-optimization.md#story-34-multi-phase-settlement-support)~~ [DEFERRED]
+      - Status: Deferred during Epic 3 scope rollback
     - [Story 3.5: Settlement Algorithm Performance Validation](./epic-3-advanced-calculations-settlement-optimization.md#story-35-settlement-algorithm-performance-validation)
       - [Acceptance Criteria](./epic-3-advanced-calculations-settlement-optimization.md#acceptance-criteria)
   - [Epic 4: Social Integration & WhatsApp Features (MVP)](./epic-4-social-integration-whatsapp-features-mvp.md)

@@ -1,6 +1,8 @@
 # Epic 3: Advanced Calculations & Settlement Optimization
 
-**Expanded Goal:** Implement instant early cash-out calculations and optimized final settlement algorithms that eliminate the mathematical complexity and disputes that plague current manual tracking methods. This epic solves the core pain points - reducing settlement time from 15-20 minutes to under 3 minutes while minimizing payment transactions.
+**SCOPE ROLLBACK NOTICE:** This PRD reflects the original Epic 3 scope. During development, significant scope creep occurred (19,400+ lines of complex features). Story 3.5 (Epic 3 Scope Rollback) successfully eliminated this scope creep, restoring Epic 3 to core MVP settlement functionality. Stories 3.1-3.3 have been implemented and QA approved. Story 3.4 has been deferred to a future epic.
+
+**Current Goal:** Implement core early cash-out calculations and basic settlement optimization that eliminate manual tracking complexity. This epic delivers essential settlement functionality - reducing settlement time and minimizing payment transactions through simplified, reliable algorithms.
 
 ## Story 3.1: Early Cash-out Calculator Implementation
 
@@ -44,19 +46,16 @@ so that **disputes are eliminated through transparent calculations**.
 5. Alternative settlement options available if primary disputed
 6. Mathematical proof exported with settlement results
 
-## Story 3.4: Multi-Phase Settlement Support
+## ~~Story 3.4: Multi-Phase Settlement Support~~ [DEFERRED]
 
-As a **poker game with players leaving at different times**,
-I want **settlement calculations that handle multiple cash-out phases**,
-so that **early leavers can settle while others continue playing**.
+**STATUS: DEFERRED TO FUTURE EPIC** - Removed during Epic 3 scope rollback (Story 3.5)
 
-### Acceptance Criteria
-1. Partial settlements process without affecting ongoing game
-2. Remaining pot recalculates after each early cash-out
-3. Settlement history tracks all intermediate calculations
-4. Final settlement accounts for all previous partial settlements
-5. Clear visualization of settlement phases and remaining players
-6. Rollback capability if early settlement needs correction
+~~As a **poker game with players leaving at different times**,~~
+~~I want **settlement calculations that handle multiple cash-out phases**,~~
+~~so that **early leavers can settle while others continue playing**.~~
+
+### ~~Acceptance Criteria~~ [SCOPE ROLLBACK]
+This story was identified as scope creep during the Epic 3 rollback (Story 3.5) and has been deferred to maintain focus on core MVP settlement functionality. The multi-phase settlement feature should be considered for a future epic focused on advanced settlement workflows.
 
 ## Story 3.5: Settlement Algorithm Performance Validation
 
