@@ -56,76 +56,48 @@ safety_mechanisms:
     - qa_decision  # QA decision on approval or return to dev
     - commit_authorization  # User must approve commits
     
-  notification_system:
-    input_required_only: true  # Only notify when user input blocks automation
-    channels: ["terminal"]  # notification channels
-    sound: false  # Disable sound notifications for performance
-    escalation_after: "10 minutes"  # remind if no response
-    max_reminders: 1
-    
-  notification_implementation:
-    # OS-specific notification commands
-    linux_wsl:
-      command: "notify-send"
-      sound_normal: "--hint=string:sound-name:message-new-instant"
-      sound_high: "--hint=string:sound-name:alarm-clock-elapsed"
-      sound_low: "--hint=string:sound-name:message"
-      
-    macos:
-      command: "osascript"
-      sound_normal: 'sound name "Ping"'
-      sound_high: 'sound name "Sosumi"'
-      sound_low: 'sound name "Tink"'
-      
-    windows:
-      command: "powershell"
-      sound_normal: "-AppLogo 'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe'"
-      sound_high: "-Sound 'Alarm'"
-      sound_low: "-Sound 'Default'"
-    
-  notification_triggers:
-    po_validation_required:
-      message: "Story {story_id} ready for PO validation"
-      action_required: "Review and approve/reject story draft"
-      command: "*validate-next-story"
-      automation_state: "PAUSED"
-      urgency: "normal"
-      
-    qa_decision_required:
-      message: "Story {story_id} QA review complete"
-      action_required: "Approve or request dev rework"
-      options: ["approve", "needs-dev-work"]
-      automation_state: "PAUSED"
-      urgency: "normal"
-      
-    commit_authorization_required:
-      message: "Story {story_id} ready for commit"
-      action_required: "Authorize git commit"
-      command: "*commit"
-      automation_state: "PAUSED"
-      urgency: "high"  # Most important - ready to ship
-      
-    cycle_continuation_required:
-      message: "Story {story_id} complete - next story available"
-      action_required: "Continue to next story or halt"
-      command: "*start-automation or *pause"
-      automation_state: "PAUSED"
-      urgency: "low"  # Less urgent - natural break point
   
 automation_workflow:
   # Following exact BMad Method Core Development Cycle flow diagram
   phases:
     1_sm_phase:
+      # Step A: "Initialize SM Agent"
+      - Execute /clear to clear conversation context
+      - Execute /sm to switch to SM agent
       # Step B: "SM: Reviews Previous Story Dev/QA Notes"
       - Load core-config.yaml and validate project structure  
       - Review previous story dev/QA notes from completed stories
       # Step B2: "SM: Drafts Next Story from Sharded Epic + Architecture"
       - Execute *draft command (create-next-story task)
-      # Step B3/B4: "PO: Validate Story Draft (Trust SM quality)"
-      - OPTIONAL: Auto-approve story drafts (trust SM validation)
-      # Step C: "Auto Approval"
-      - AUTO: Proceed to development automatically
-      - UPDATE: Set story status to "Approved", log approval timestamp
+      # Step B3: "Check Draft Command Output"
+      - VALIDATE: Check *draft command output for validation status
+      - IF output contains "All validation criteria PASSED" OR "story is ready for development":
+        # Step B4: "PO: Validate Story Draft"
+        - Execute /po to switch to PO agent
+        - Execute *validate-story-draft {story_number} command
+        - GATE: Wait for PO validation result
+      - ELSE:
+        # Step B4-ALT: "Manual Intervention Required"
+        - HALT: Request user input for validation failures
+        - Display draft validation issues to user
+        - Require manual resolution before proceeding
+      # Step C: "PO Approval Gate"
+      - VALIDATE: Check PO validation output for implementation readiness
+      - IF implementation readiness score < 10:
+        - HALT: Display identified issues and required improvements
+        - Require resolution of all issues to achieve score of 10
+        - Return to Step B2 for story revision and re-validation
+      - IF implementation readiness score = 10 OR Final Assessment contains:
+        - "✅ GO: Story is ready for implementation" OR
+        - "APPROVED FOR IMPLEMENTATION" OR
+        - Final Assessment shows ✅ GO status:
+        - UPDATE: Set story status to "Approved"
+        - Execute /clear to clear conversation content
+        - Execute /dev to switch to dev agent
+        - Execute *develop-story {story_number} command
+        - AUTO: Proceed to development phase
+      - ELSE:
+        - Return to Step B2 for story revision
       
     2_dev_phase:
       # Step D: "Dev: Sequential Task Execution"  
@@ -135,33 +107,45 @@ automation_workflow:
         - Execute *develop-story command for current task
         # Step F: "Dev: Run All Validations"
         - Execute *run-tests command
-        - Execute: npm run test:core (optimized core validation)
+        - Execute: npm run test (standard test validation)
         - Execute: npm run typecheck (TypeScript validation)
         - CRITICAL: Only mark task [x] if ALL validations pass
-      # Step G: "Dev: Mark Ready for Review + Add Notes"
-      - Execute story-dod-checklist when all tasks complete
-      - Set story status to "Ready for Review" 
-      - Add completion notes to Dev Agent Record
-      - UPDATE: Log dev completion timestamp, update task progress
-      # Step H: "Proceed to QA Review"
-      - Automatically proceed to QA phase (required)
+      # Step G: "Check Development Completion Status"
+      - VALIDATE: Check *develop-story command output for completion status
+      - IF output contains "Story Status: Ready for Review 🎯" OR "development is complete":
+        - Execute story-dod-checklist when all tasks complete
+        - UPDATE: Set story status to "Ready for Review"
+        # Step H: "Hand over to QA Review"
+        - Execute /qa to switch to QA agent
+        - Execute *review {story_number} command
+        - AUTO: Proceed to QA phase
+      - ELSE:
+        - Continue development cycle until completion criteria met
       
     3_qa_phase:
       # Step I: "QA: Senior Dev Review + Active Refactoring"
-      - REQUIRED: Execute *review {story} command for all stories
+      - Execute *review {story_number} command
       # Step J: "QA: Review, Refactor Code, Add Tests, Document Notes"
       - Apply refactoring and improvements as needed
       - Run architectural validation using centralized test patterns
       - Update QA Results section in story file
       # Step L: "QA Decision"
-      - GATE: QA decision - "Needs Dev Work" (return to Step D) or "Approved"
-      - UPDATE: Log QA decision timestamp, update story status
+      - VALIDATE: Check *review command output for approval status
+      - IF output contains:
+        - "This code is ready for production deployment with confidence." OR
+        - "✅ APPROVED - STORY MARKED AS DONE"
+      - THEN:
+        - UPDATE: Set story status to "Done"
+        - AUTO: Proceed to commit phase
+      - ELSE IF output indicates "Needs Dev Work":
+        - Return to Step D (development phase)
+      - ELSE:
+        - HALT: Request manual QA decision
       
     4_commit_phase:
       # Step M: "IMPORTANT: Verify All Regression Tests and Linting are Passing"
       - CRITICAL: Execute ALL regression tests
-      - Execute: npm run test:core (optimized core tests)
-      - Execute: npm run test:fast (performance-optimized full suite)
+      - Execute: npm run test (full test suite)
       - Execute: npm run lint && npm run typecheck
       - HALT if any tests fail - require manual fix before proceeding
       # Step N: "IMPORTANT: COMMIT YOUR CHANGES BEFORE PROCEEDING!"
@@ -169,8 +153,6 @@ automation_workflow:
       - Execute git add, commit with proper BMad commit message
       # Step K: "Mark Story as Done"
       - Set story status to "Done"
-      - Update story completion timestamp
-      - UPDATE: Log commit details, update epic progress counters
       
     5_loop_control:
       # Back to Step B for next story
@@ -192,14 +174,14 @@ test_error_recovery:
     - "Kill hanging test processes: pkill -f jest"
     - "Clean up test cache: rm -rf .jest-cache"
     - "Clean up temp test files: rm -rf temp/"
-    - "Retry with core tests: npm run test:core"
-    - "If still failing, try fast config: npm run test:fast"
+    - "Retry with standard tests: npm run test"
+    - "If still failing, try with clean cache: npm run test --clearCache"
     
   database_conflict_recovery:
     - "Clean up test databases: rm -f temp/*.db"
     - "Clear Jest module cache: jest --clearCache"
-    - "Reset test environment: npm run test:core --no-cache"
-    - "If issues persist: npm run test:services (targeted service tests)"
+    - "Reset test environment: npm run test --no-cache"
+    - "If issues persist: run targeted cleanup and retry"
 
 commands: # All commands require * prefix when used
   start-automation: Begin automated development cycles with safety checks
@@ -216,10 +198,7 @@ commands: # All commands require * prefix when used
   help: Show this command reference
   
   # Test commands
-  test-core: Execute core test suite (UndoManager, TransactionService, App)
-  test-fast: Execute performance-optimized test suite
-  test-stores: Execute Zustand store tests with native patterns
-  test-services: Execute service-specific tests
+  run-tests: Execute full test suite
   test-cleanup: Clean up test artifacts, cache, and processes
 
 agent_commands_integration:
@@ -230,9 +209,7 @@ agent_commands_integration:
     
   dev_commands:
     - "*develop-story" # Sequential task execution with D→E→F loop
-    - "*run-tests" # Explicit validation step (Step F) - now with optimized strategy
-    - "*test-core" # Core testing during development
-    - "*test-fast" # Performance-optimized testing
+    - "*run-tests" # Standard testing during development
     - "*explain" # For debugging complex implementations
     
   qa_commands:
@@ -245,25 +222,18 @@ agent_commands_integration:
 status_transitions:
   # Exact status updates required at each step
   story_statuses:
-    - "Draft" → "Approved" (after User Approval Gate)
-    - "Approved" → "Ready for Review" (after Step G)
-    - "Ready for Review" → "Done" (after Step K)
+    - "Draft" → "Approved" (after PO validation with readiness score ≥10)
+    - "Approved" → "Ready for Review" (after dev completion)
+    - "Ready for Review" → "Done" (after QA approval with production readiness)
     
 validation_commands:
-  # Optimized test validation strategy with architectural improvements
   per_task_validation: 
-    validation: "npm run test:core" # Step F - core validation after each task
+    validation: "npm run test" # Step F - full test validation after each task
     
   regression_validation: 
-    test_suite: "npm run test:fast" # Step M - optimized regression before commit
-    
-  test_execution_strategy:
-    development_phase: "optimized" # Use npm run test:core during dev
-    qa_phase: "comprehensive" # Use npm run test:fast during QA  
-    commit_phase: "full" # Use npm run test:fast + lint + typecheck for commits
+    test_suite: "npm run test" # Step M - full test suite before commit
     
   test_architecture:
-    core_tests: "UndoManager, TransactionService, App - foundational functionality"
     store_tests: "Native Zustand patterns without React hooks dependency"
     error_handling: "Unified error testing strategy with message patterns"
     mock_architecture: "Centralized factories for consistent test scenarios"
@@ -278,25 +248,10 @@ state_management:
   automation_active: false
   
 progress_tracking:
-  pipeline_view:
-    show_task_details: false
-    show_timestamps: true
-    show_epic_progress: true
-    auto_refresh_interval: 60  # seconds
-    
-  story_progress:
-    current_story_id: null
-    total_tasks: 0
-    completed_tasks: 0
-    current_task: null
-    phase_history: []
-    
-  epic_progress:
-    current_epic: null
-    total_stories: 0
-    completed_stories: 0
-    in_progress_stories: 0
-    
+  # Minimal end-state only tracking for performance
+  current_story: null
+  current_phase: "idle"
+  
   pipeline_symbols:
     completed: "[✓]"
     in_progress: "[🔄]"
@@ -318,14 +273,12 @@ commit_integration:
   required_tests: 
     - npm run lint
     - npm run typecheck  
-    - npm run test:core # Core functionality validation
-    - npm run test:fast # Performance-optimized full suite
+    - npm run test # Full test suite
     
   test_execution_protocol:
-    1. "Execute core test suite: npm run test:core"
-    2. "Execute performance-optimized suite: npm run test:fast"
-    3. "Review test execution results for any failures"
-    4. "Verify React 19 compatibility and modern test patterns"
+    1. "Execute full test suite: npm run test"
+    2. "Review test execution results for any failures"
+    3. "Verify React 19 compatibility and modern test patterns"
   commit_message_template: |
     {story_id}: {story_title}
     
@@ -352,10 +305,6 @@ test_infrastructure_architecture:
       description: "Factory functions for consistent, reusable mocks"
       solution: "mock-factories.js with ServiceMocks, DataFactories, ScenarioFactories"
       
-    performance_optimization:
-      status: "IMPLEMENTED"
-      description: "Reduced test timeouts and improved execution speed"
-      solution: "jest.performance.config.js with 75% CPU utilization and 15s timeout"
       
     native_zustand_patterns:
       status: "IMPLEMENTED"
@@ -363,18 +312,13 @@ test_infrastructure_architecture:
       solution: "zustand-testing.js with createTestStore and testStoreAction utilities"
   
   test_execution_strategy:
-    core_tests: "npm run test:core - UndoManager, TransactionService, App"
-    store_tests: "npm run test:stores - Native Zustand patterns"
-    performance_tests: "npm run test:fast - Optimized configuration"
-    service_tests: "npm run test:services - Targeted service validation"
+    full_tests: "npm run test - Complete test suite"
     
   working_test_status:
-    passing: ["UndoManager (22/22 tests)", "App.test.tsx (renders correctly)"]
-    non_blocking_issues: ["Settlement store tests (implementation-specific)", "Integration tests (cross-service dependencies)"]
+    standard_execution: "Full test suite with standard Jest configuration"
     
   architectural_benefits:
     - "React 19 compatibility - No more dependency conflicts"
-    - "Performance optimization - Faster test execution"
     - "Maintainable infrastructure - Centralized utilities"
     - "Consistent error testing - Unified patterns"
     - "Scalable mock architecture - Easy to extend"
