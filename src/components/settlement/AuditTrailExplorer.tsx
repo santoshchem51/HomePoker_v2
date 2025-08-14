@@ -39,7 +39,6 @@ interface AuditTrailExplorerProps {
 export const AuditTrailExplorer: React.FC<AuditTrailExplorerProps> = ({
   auditTrail,
   mathematicalProof,
-  settlement,
   onStepSelect,
   onProofStepSelect,
   onExportAuditTrail,

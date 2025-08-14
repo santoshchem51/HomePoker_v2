@@ -15,9 +15,7 @@ import {
   AccessibilityInfo,
 } from 'react-native';
 import { 
-  SettlementValidation, 
-  ValidationErrorCode,
-  WarningClassification 
+  SettlementValidation
 } from '../../types/settlement';
 
 interface ValidationStatusIndicatorProps {

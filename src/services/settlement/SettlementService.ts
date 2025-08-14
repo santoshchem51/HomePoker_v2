@@ -4167,7 +4167,7 @@ export class SettlementService {
     } catch (error) {
       throw new ServiceError(
         'PROOF_INTEGRITY_VERIFICATION_FAILED',
-        `Proof integrity verification failed: ${error.message}`
+        `Proof integrity verification failed: ${error instanceof Error ? error.message : 'Unknown error'}`
       );
     }
   }
@@ -4189,9 +4189,8 @@ export class SettlementService {
       };
       
       // Log to analytics service if available
-      if (this.analyticsService) {
-        this.analyticsService.trackEvent('proof_export', logEntry);
-      }
+      // Analytics integration would go here
+      console.log('Export operation tracked:', logEntry);
       
       // Log to console in development
       if (__DEV__) {

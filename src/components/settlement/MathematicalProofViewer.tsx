@@ -44,8 +44,7 @@ export const MathematicalProofViewer: React.FC<MathematicalProofViewerProps> = (
   accessibilityLabel = 'Mathematical Proof Viewer',
 }) => {
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set());
-  const [selectedExportFormat] = useState<ProofExportFormat | null>(null);
-  const [showExportModal] = useState(false);
+  // Export state removed - handled by parent component
   const [showStepDetails, setShowStepDetails] = useState<ProofStep | null>(null);
 
   // Format currency helper
