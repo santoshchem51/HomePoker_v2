@@ -1,8 +1,9 @@
 /**
  * TransactionHistory - Component for displaying transaction timeline
  * Implements Story 1.3 AC: 4 - Buy-in history displays all transactions with timestamps
+ * Enhanced with React performance optimization patterns
  */
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback, memo } from 'react';
 import {
   View,
   Text,
@@ -12,6 +13,7 @@ import {
   RefreshControl,
 } from 'react-native';
 import { TransactionSummary, PlayerBalance } from '../../types/transaction';
+import { shallowEqual, useStableCallback, useMemoWithComparison } from '../../utils/component-optimization';
 
 export interface TransactionHistoryProps {
   transactions: TransactionSummary[];
@@ -26,7 +28,7 @@ export interface TransactionHistoryProps {
 
 type FilterType = 'all' | 'buy_in' | 'cash_out';
 
-export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
+const TransactionHistoryComponent: React.FC<TransactionHistoryProps> = ({
   transactions,
   playerBalances = [],
   loading: _loading,
@@ -39,18 +41,25 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
   const [filter, setFilter] = useState<FilterType>('all');
   const [refreshing, setRefreshing] = useState(false);
 
-  // Filter transactions based on selected type
-  const filteredTransactions = useMemo(() => {
+  // Optimized filter transactions with memoization
+  const filteredTransactions = useMemoWithComparison(() => {
     if (filter === 'all') {
       return transactions;
     }
     return transactions.filter(transaction => transaction.type === filter);
-  }, [transactions, filter]);
+  }, [transactions, filter], shallowEqual);
+
+  // Memoized transaction counts for filter buttons
+  const transactionCounts = useMemo(() => ({
+    all: transactions.length,
+    buy_in: transactions.filter(t => t.type === 'buy_in').length,
+    cash_out: transactions.filter(t => t.type === 'cash_out').length,
+  }), [transactions]);
 
   /**
-   * Handle refresh with loading state
+   * Handle refresh with loading state - optimized with useCallback
    */
-  const handleRefresh = async () => {
+  const handleRefresh = useStableCallback(async () => {
     if (!onRefresh) return;
     
     try {
@@ -59,12 +68,12 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
     } finally {
       setRefreshing(false);
     }
-  };
+  }, [onRefresh]);
 
   /**
-   * Format transaction timestamp for display
+   * Format transaction timestamp for display - memoized
    */
-  const formatTimestamp = (timestamp: Date): string => {
+  const formatTimestamp = useCallback((timestamp: Date): string => {
     const now = new Date();
     const diffMs = now.getTime() - timestamp.getTime();
     const diffMins = Math.floor(diffMs / (1000 * 60));
@@ -82,12 +91,12 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
     } else {
       return timestamp.toLocaleDateString();
     }
-  };
+  }, []);
 
   /**
-   * Get transaction type display info
+   * Get transaction type display info - memoized
    */
-  const getTransactionTypeInfo = (type: 'buy_in' | 'cash_out') => {
+  const getTransactionTypeInfo = useCallback((type: 'buy_in' | 'cash_out') => {
     switch (type) {
       case 'buy_in':
         return {
@@ -102,19 +111,19 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
           symbol: '-',
         };
     }
-  };
+  }, []);
 
   /**
-   * Get player balance information for display
+   * Get player balance information for display - memoized
    */
-  const getPlayerBalance = (playerId: string): PlayerBalance | undefined => {
+  const getPlayerBalance = useCallback((playerId: string): PlayerBalance | undefined => {
     return playerBalances.find(balance => balance.playerId === playerId);
-  };
+  }, [playerBalances]);
 
   /**
-   * Get net position indicator for a player
+   * Get net position indicator for a player - memoized
    */
-  const getNetPositionInfo = (playerBalance: PlayerBalance) => {
+  const getNetPositionInfo = useCallback((playerBalance: PlayerBalance) => {
     const netPosition = playerBalance.netPosition;
     if (netPosition > 0) {
       return { text: `+$${netPosition.toFixed(2)}`, color: '#27AE60', label: 'winning' };
@@ -123,12 +132,12 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
     } else {
       return { text: '$0.00', color: '#6C757D', label: 'even' };
     }
-  };
+  }, []);
 
   /**
-   * Render individual transaction item
+   * Render individual transaction item - memoized for performance
    */
-  const renderTransactionItem = ({ item }: { item: TransactionSummary }) => {
+  const renderTransactionItem = useCallback(({ item }: { item: TransactionSummary }) => {
     const typeInfo = getTransactionTypeInfo(item.type);
     const canUndo = showUndoButton?.(item) ?? false;
     const playerBalance = getPlayerBalance(item.playerId);
@@ -206,12 +215,12 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
         )}
       </TouchableOpacity>
     );
-  };
+  }, [getTransactionTypeInfo, showUndoButton, getPlayerBalance, getNetPositionInfo, onTransactionPress, showRunningBalance, onUndo, formatTimestamp]);
 
   /**
-   * Render empty state
+   * Render empty state - memoized
    */
-  const renderEmptyState = () => (
+  const renderEmptyState = useCallback(() => (
     <View style={styles.emptyState}>
       <Text style={styles.emptyTitle}>No Transactions</Text>
       <Text style={styles.emptyMessage}>
@@ -221,7 +230,7 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
         }
       </Text>
     </View>
-  );
+  ), [filter]);
 
   return (
     <View style={styles.container}>
@@ -232,13 +241,13 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
             styles.filterButton,
             filter === 'all' ? styles.filterButtonActive : null
           ]}
-          onPress={() => setFilter('all')}
+          onPress={useCallback(() => setFilter('all'), [])}
         >
           <Text style={[
             styles.filterButtonText,
             filter === 'all' ? styles.filterButtonTextActive : null
           ]}>
-            All ({transactions.length})
+            All ({transactionCounts.all})
           </Text>
         </TouchableOpacity>
         
@@ -247,13 +256,13 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
             styles.filterButton,
             filter === 'buy_in' ? styles.filterButtonActive : null
           ]}
-          onPress={() => setFilter('buy_in')}
+          onPress={useCallback(() => setFilter('buy_in'), [])}
         >
           <Text style={[
             styles.filterButtonText,
             filter === 'buy_in' ? styles.filterButtonTextActive : null
           ]}>
-            Buy-ins ({transactions.filter(t => t.type === 'buy_in').length})
+            Buy-ins ({transactionCounts.buy_in})
           </Text>
         </TouchableOpacity>
         
@@ -262,13 +271,13 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
             styles.filterButton,
             filter === 'cash_out' ? styles.filterButtonActive : null
           ]}
-          onPress={() => setFilter('cash_out')}
+          onPress={useCallback(() => setFilter('cash_out'), [])}
         >
           <Text style={[
             styles.filterButtonText,
             filter === 'cash_out' ? styles.filterButtonTextActive : null
           ]}>
-            Cash-outs ({transactions.filter(t => t.type === 'cash_out').length})
+            Cash-outs ({transactionCounts.cash_out})
           </Text>
         </TouchableOpacity>
       </View>
@@ -276,7 +285,7 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
       {/* Transaction List */}
       <FlatList
         data={filteredTransactions}
-        keyExtractor={(item) => item.id}
+        keyExtractor={useCallback((item: TransactionSummary) => item.id, [])}
         renderItem={renderTransactionItem}
         ListEmptyComponent={renderEmptyState}
         refreshControl={
@@ -292,6 +301,13 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
         contentContainerStyle={
           filteredTransactions.length === 0 ? styles.emptyContainer : styles.listContent
         }
+        // Performance optimizations
+        removeClippedSubviews={true}
+        maxToRenderPerBatch={10}
+        updateCellsBatchingPeriod={50}
+        initialNumToRender={20}
+        windowSize={10}
+        getItemLayout={undefined} // Disable since item heights may vary
       />
     </View>
   );
@@ -481,3 +497,20 @@ const styles = StyleSheet.create({
     marginLeft: 4,
   },
 });
+
+// Memoized export for performance optimization
+export const TransactionHistory = memo(TransactionHistoryComponent, (prevProps, nextProps) => {
+  return (
+    prevProps.transactions === nextProps.transactions &&
+    prevProps.playerBalances === nextProps.playerBalances &&
+    prevProps.loading === nextProps.loading &&
+    prevProps.onRefresh === nextProps.onRefresh &&
+    prevProps.onTransactionPress === nextProps.onTransactionPress &&
+    prevProps.showUndoButton === nextProps.showUndoButton &&
+    prevProps.onUndo === nextProps.onUndo &&
+    prevProps.showRunningBalance === nextProps.showRunningBalance
+  );
+});
+
+// Set display name for debugging
+TransactionHistory.displayName = 'TransactionHistory';

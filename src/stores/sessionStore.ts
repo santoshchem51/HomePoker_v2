@@ -11,6 +11,7 @@ import { Transaction, TransactionSummary, PlayerBalance } from '../types/transac
 import { SessionService } from '../services/core/SessionService';
 import TransactionService from '../services/core/TransactionService';
 import { ServiceError } from '../services/core/ServiceError';
+import { responsiveAsync } from '../utils/ui-responsiveness';
 
 interface SessionStoreState {
   // Current session data
@@ -28,6 +29,10 @@ interface SessionStoreState {
   // UI state
   canStartGame: boolean;
   canCompleteGame: boolean;
+
+  // Responsive UI state
+  operationLoading: { [operation: string]: boolean };
+  optimisticUpdates: { [key: string]: any };
 
   // Actions for session management
   actions: {
@@ -75,6 +80,10 @@ export const useSessionStore = create<SessionStoreState>()(
       
       canStartGame: false,
       canCompleteGame: false,
+
+      // Responsive UI state
+      operationLoading: {},
+      optimisticUpdates: {},
 
       actions: {
         /**
@@ -266,7 +275,10 @@ export const useSessionStore = create<SessionStoreState>()(
             transactionLoading: false,
             mostRecentTransaction: null,
             canStartGame: false,
-            canCompleteGame: false
+            canCompleteGame: false,
+            // Clear responsive UI state
+            operationLoading: {},
+            optimisticUpdates: {}
           });
         },
 
@@ -302,72 +314,125 @@ export const useSessionStore = create<SessionStoreState>()(
         // Transaction Actions - Story 1.3
 
         /**
-         * Record a buy-in transaction
+         * Record a buy-in transaction with responsive UI and optimistic updates
          * AC: 1, 2, 3 - Buy-in recording with immediate balance updates
          */
         recordBuyIn: async (sessionId: string, playerId: string, amount: number) => {
-          set({ transactionLoading: true, error: null });
-
-          try {
-            const transaction = await transactionService.recordBuyIn(
-              sessionId,
+          const operationId = `recordBuyIn_${playerId}_${Date.now()}`;
+          
+          // Apply optimistic update immediately for UI responsiveness
+          const optimisticTransactionId = `temp_${Date.now()}`;
+          const playerName = get().players.find(p => p.id === playerId)?.name || 'Unknown';
+          
+          set((state) => {
+            // Create optimistic transaction
+            const optimisticTransaction = {
+              id: optimisticTransactionId,
               playerId,
+              playerName,
+              type: 'buy_in' as const,
               amount,
-              'manual',
-              'user'
+              timestamp: new Date(),
+              method: 'manual' as const,
+              isVoided: false
+            };
+
+            // Apply optimistic updates
+            const newTransactions = [optimisticTransaction, ...state.transactions];
+            const updatedSession = state.currentSession ? {
+              ...state.currentSession,
+              totalPot: state.currentSession.totalPot + amount
+            } : null;
+            const updatedPlayers = state.players.map(player => 
+              player.id === playerId 
+                ? {
+                    ...player,
+                    currentBalance: player.currentBalance + amount,
+                    totalBuyIns: player.totalBuyIns + amount
+                  }
+                : player
             );
 
-            // Update state with optimistic updates
-            set((state) => {
-              // Update transaction list
-              const newTransactions = [
-                {
-                  id: transaction.id,
-                  playerId: transaction.playerId,
-                  playerName: state.players.find(p => p.id === playerId)?.name || 'Unknown',
-                  type: 'buy_in' as const,
-                  amount: transaction.amount,
-                  timestamp: transaction.timestamp,
-                  method: transaction.method,
-                  isVoided: transaction.isVoided
-                },
-                ...state.transactions
-              ];
+            return {
+              ...state,
+              transactions: newTransactions,
+              currentSession: updatedSession,
+              players: updatedPlayers,
+              operationLoading: { ...state.operationLoading, [operationId]: true },
+              optimisticUpdates: { ...state.optimisticUpdates, [optimisticTransactionId]: true }
+            };
+          });
 
-              // Update current session total pot
-              const updatedSession = state.currentSession ? {
-                ...state.currentSession,
-                totalPot: state.currentSession.totalPot + amount
-              } : null;
+          // Perform actual database operation responsively
+          return responsiveAsync(
+            () => transactionService.recordBuyIn(sessionId, playerId, amount, 'manual', 'user'),
+            {
+              operationName: 'record_buy_in',
+              loadingCallback: (loading) => {
+                set((state) => ({
+                  ...state,
+                  operationLoading: { ...state.operationLoading, [operationId]: loading }
+                }));
+              },
+              successCallback: (transaction) => {
+                // Replace optimistic transaction with real one
+                set((state) => {
+                  const filteredTransactions = state.transactions.filter(t => t.id !== optimisticTransactionId);
+                  const realTransaction = {
+                    id: transaction.id,
+                    playerId: transaction.playerId,
+                    playerName,
+                    type: 'buy_in' as const,
+                    amount: transaction.amount,
+                    timestamp: transaction.timestamp,
+                    method: transaction.method,
+                    isVoided: transaction.isVoided
+                  };
 
-              // Update player balance
-              const updatedPlayers = state.players.map(player => 
-                player.id === playerId 
-                  ? {
-                      ...player,
-                      currentBalance: player.currentBalance + amount,
-                      totalBuyIns: player.totalBuyIns + amount
-                    }
-                  : player
-              );
+                  const updatedOptimisticUpdates = { ...state.optimisticUpdates };
+                  delete updatedOptimisticUpdates[optimisticTransactionId];
 
-              return {
-                ...state,
-                transactions: newTransactions,
-                currentSession: updatedSession,
-                players: updatedPlayers,
-                mostRecentTransaction: transaction,
-                transactionLoading: false
-              };
-            });
-          } catch (error) {
-            console.error('Failed to record buy-in:', error);
-            set({ 
-              transactionLoading: false, 
-              error: error instanceof ServiceError ? error.message : 'Failed to record buy-in' 
-            });
-            throw error;
-          }
+                  return {
+                    ...state,
+                    transactions: [realTransaction, ...filteredTransactions],
+                    mostRecentTransaction: transaction,
+                    optimisticUpdates: updatedOptimisticUpdates
+                  };
+                });
+              },
+              errorCallback: (error) => {
+                // Rollback optimistic updates
+                set((state) => {
+                  const rollbackTransactions = state.transactions.filter(t => t.id !== optimisticTransactionId);
+                  const updatedSession = state.currentSession ? {
+                    ...state.currentSession,
+                    totalPot: state.currentSession.totalPot - amount
+                  } : null;
+                  const rollbackPlayers = state.players.map(player => 
+                    player.id === playerId 
+                      ? {
+                          ...player,
+                          currentBalance: player.currentBalance - amount,
+                          totalBuyIns: player.totalBuyIns - amount
+                        }
+                      : player
+                  );
+
+                  const updatedOptimisticUpdates = { ...state.optimisticUpdates };
+                  delete updatedOptimisticUpdates[optimisticTransactionId];
+
+                  return {
+                    ...state,
+                    transactions: rollbackTransactions,
+                    currentSession: updatedSession,
+                    players: rollbackPlayers,
+                    optimisticUpdates: updatedOptimisticUpdates,
+                    error: error instanceof ServiceError ? error.message : 'Failed to record buy-in'
+                  };
+                });
+              }
+            }
+          );
         },
 
         /**
@@ -525,4 +590,20 @@ export const sessionSelectors = {
   useCanCompleteGame: () => useSessionStore(state => state.canCompleteGame),
   usePlayerCount: () => useSessionStore(state => state.players.length),
   useSessionStatus: () => useSessionStore(state => state.currentSession?.status),
+  
+  // Responsive UI selectors
+  useOperationLoading: (operationId?: string) => useSessionStore(state => 
+    operationId ? state.operationLoading[operationId] || false : Object.values(state.operationLoading).some(Boolean)
+  ),
+  useOptimisticUpdates: () => useSessionStore(state => state.optimisticUpdates),
+  useTransactionLoading: () => useSessionStore(state => state.transactionLoading),
+  useTransactions: () => useSessionStore(state => state.transactions),
+  
+  // Memoized computed selectors
+  useIsAnyOperationLoading: () => useSessionStore(state => 
+    state.loading || state.transactionLoading || Object.values(state.operationLoading).some(Boolean)
+  ),
+  useHasOptimisticUpdates: () => useSessionStore(state => 
+    Object.keys(state.optimisticUpdates).length > 0
+  ),
 };

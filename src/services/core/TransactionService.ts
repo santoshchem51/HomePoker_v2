@@ -232,6 +232,139 @@ export class TransactionService {
   }
 
   /**
+   * Get paginated transaction history for a session with virtualization support
+   * Implements Story 5.2 AC: 5 - Lazy loading for large transaction lists
+   */
+  public async getTransactionHistoryPaginated(
+    sessionId: string,
+    page: number = 0,
+    limit: number = 50,
+    filter?: 'all' | 'buy_in' | 'cash_out',
+    searchTerm?: string
+  ): Promise<{
+    transactions: TransactionSummary[];
+    totalCount: number;
+    hasMore: boolean;
+    page: number;
+    limit: number;
+  }> {
+    try {
+      const offset = page * limit;
+      
+      // Build WHERE clause with filters
+      let whereClause = 't.session_id = ?';
+      const params: any[] = [sessionId];
+      
+      if (filter && filter !== 'all') {
+        whereClause += ' AND t.type = ?';
+        params.push(filter);
+      }
+      
+      if (searchTerm) {
+        whereClause += ' AND (p.name LIKE ? OR t.amount LIKE ?)';
+        const searchPattern = `%${searchTerm}%`;
+        params.push(searchPattern, searchPattern);
+      }
+
+      // Get total count for pagination
+      const countQuery = `
+        SELECT COUNT(*) as total
+        FROM transactions t
+        JOIN players p ON t.player_id = p.id
+        WHERE ${whereClause}
+      `;
+      
+      const countResults = await this.dbService.executeQuery(countQuery, params);
+      const totalCount = countResults.rows.item(0).total;
+
+      // Get paginated results
+      const query = `
+        SELECT t.id, t.player_id, t.type, t.amount, t.timestamp, t.method, t.is_voided,
+               p.name as player_name
+        FROM transactions t
+        JOIN players p ON t.player_id = p.id
+        WHERE ${whereClause}
+        ORDER BY t.timestamp DESC
+        LIMIT ? OFFSET ?
+      `;
+      
+      const queryParams = [...params, limit, offset];
+      const results = await this.dbService.executeQuery(query, queryParams);
+
+      const transactions: TransactionSummary[] = [];
+      for (let i = 0; i < results.rows.length; i++) {
+        const row = results.rows.item(i);
+        transactions.push({
+          id: row.id,
+          playerId: row.player_id,
+          playerName: row.player_name,
+          type: row.type as 'buy_in' | 'cash_out',
+          amount: parseFloat(row.amount),
+          timestamp: new Date(row.timestamp),
+          method: row.method as 'voice' | 'manual',
+          isVoided: Boolean(row.is_voided)
+        });
+      }
+
+      const hasMore = offset + transactions.length < totalCount;
+
+      return {
+        transactions,
+        totalCount,
+        hasMore,
+        page,
+        limit
+      };
+    } catch (error) {
+      console.error('Failed to get paginated transaction history:', error);
+      throw new ServiceError('TRANSACTION_HISTORY_FAILED', `Failed to retrieve paginated transaction history: ${error}`);
+    }
+  }
+
+  /**
+   * Search transactions across all sessions (for global transaction search)
+   */
+  public async searchTransactions(
+    searchTerm: string,
+    limit: number = 100
+  ): Promise<TransactionSummary[]> {
+    try {
+      const searchPattern = `%${searchTerm}%`;
+      const results = await this.dbService.executeQuery(
+        `SELECT t.id, t.player_id, t.type, t.amount, t.timestamp, t.method, t.is_voided,
+                p.name as player_name, s.name as session_name
+         FROM transactions t
+         JOIN players p ON t.player_id = p.id
+         JOIN sessions s ON t.session_id = s.id
+         WHERE p.name LIKE ? OR t.amount LIKE ? OR s.name LIKE ?
+         ORDER BY t.timestamp DESC
+         LIMIT ?`,
+        [searchPattern, searchPattern, searchPattern, limit]
+      );
+
+      const transactions: TransactionSummary[] = [];
+      for (let i = 0; i < results.rows.length; i++) {
+        const row = results.rows.item(i);
+        transactions.push({
+          id: row.id,
+          playerId: row.player_id,
+          playerName: row.player_name,
+          type: row.type as 'buy_in' | 'cash_out',
+          amount: parseFloat(row.amount),
+          timestamp: new Date(row.timestamp),
+          method: row.method as 'voice' | 'manual',
+          isVoided: Boolean(row.is_voided)
+        });
+      }
+
+      return transactions;
+    } catch (error) {
+      console.error('Failed to search transactions:', error);
+      throw new ServiceError('TRANSACTION_SEARCH_FAILED', `Failed to search transactions: ${error}`);
+    }
+  }
+
+  /**
    * Calculate current player balance
    * AC: 3
    */

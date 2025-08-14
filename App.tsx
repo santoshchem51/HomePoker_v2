@@ -5,9 +5,14 @@
  */
 
 import React, { useEffect, useState, useCallback } from 'react';
-import { StatusBar, StyleSheet, useColorScheme, View, Text, TouchableOpacity } from 'react-native';
+import { StatusBar, StyleSheet, useColorScheme, View, Text, TouchableOpacity, InteractionManager } from 'react-native';
 import { DatabaseService } from './src/services/infrastructure/DatabaseService';
 import { CrashReportingService, setupGlobalErrorHandler } from './src/services/monitoring/CrashReportingService';
+import { StartupOptimizer } from './src/utils/startup-optimization';
+import { useMemoryManagement, useMemoryMonitoring } from './src/hooks/useMemoryManagement';
+
+// Performance monitoring for startup
+let startupStartTime = Date.now();
 
 function App() {
   const isDarkMode = useColorScheme() === 'dark';
@@ -15,29 +20,104 @@ function App() {
   const [initError, setInitError] = useState<string | null>(null);
   const [retryCount, setRetryCount] = useState(0);
   const [isRetrying, setIsRetrying] = useState(false);
+  const [startupPhase, setStartupPhase] = useState<'database' | 'services' | 'complete'>('database');
 
-  const initializeApp = useCallback(async () => {
+  // Memory management hooks
+  const { trackTimer } = useMemoryManagement({ 
+    componentName: 'App',
+    enableAutoCleanup: true,
+    cleanupDelay: 10000 // 10 seconds
+  });
+  const { getCurrentMetrics, performCleanup } = useMemoryMonitoring(true);
+
+  // Lazy initialization of non-critical services
+  const initializeNonCriticalServices = useCallback(async () => {
+    const servicesStartTime = Date.now();
     const crashReporting = CrashReportingService.getInstance();
+    const startupOptimizer = StartupOptimizer.getInstance();
+    
+    try {
+      setStartupPhase('services');
+      console.log('Initializing non-critical services...');
+      
+      // Use startup optimizer for progressive loading
+      await startupOptimizer.preloadCriticalComponents();
+      
+      // Preload service modules in background without blocking UI
+      const servicePromises = [
+        import('./src/services/core/SessionService'),
+        import('./src/services/core/TransactionService'),
+        import('./src/services/core/ProfileService')
+      ];
+      
+      // Don't wait for all services, just start loading them
+      Promise.all(servicePromises).then(() => {
+        console.log('Core services preloaded');
+      }).catch(error => {
+        console.warn('Service preloading failed:', error);
+      });
+      
+      const servicesInitTime = Date.now() - servicesStartTime;
+      crashReporting.reportServiceInitializationTime(servicesInitTime, true);
+      startupOptimizer.recordMetric('servicesInit', servicesInitTime);
+      
+      setStartupPhase('complete');
+      
+      // Report total startup time and initial memory metrics
+      const totalStartupTime = Date.now() - startupStartTime;
+      crashReporting.reportAppStartupTime(totalStartupTime);
+      startupOptimizer.recordMetric('totalStartup', totalStartupTime);
+      
+      // Report initial memory usage
+      const initialMemoryMetrics = getCurrentMetrics();
+      if (initialMemoryMetrics) {
+        console.log('Initial memory metrics:', initialMemoryMetrics);
+      }
+      
+      console.log(`App startup completed in ${totalStartupTime}ms`);
+      
+    } catch (error) {
+      const servicesInitTime = Date.now() - servicesStartTime;
+      crashReporting.reportServiceInitializationTime(servicesInitTime, false);
+      console.warn('Non-critical service initialization failed:', error);
+      
+      // Don't block app startup for non-critical services
+      setStartupPhase('complete');
+    }
+  }, [getCurrentMetrics]);
+
+  // Optimized initialization with lazy loading and preloading
+  const initializeDatabase = useCallback(async () => {
+    const crashReporting = CrashReportingService.getInstance();
+    const startupOptimizer = StartupOptimizer.getInstance();
     const dbStartTime = Date.now();
     
     try {
       console.log('Starting database initialization...');
       setIsRetrying(false);
+      setStartupPhase('database');
       
       // Initialize database with timeout protection
       await DatabaseService.getInstance().initialize();
       
       const dbInitTime = Date.now() - dbStartTime;
       crashReporting.reportDatabaseInitializationTime(dbInitTime, true);
+      startupOptimizer.recordMetric('databaseInit', dbInitTime);
       
       console.log('Database initialized successfully!');
       setDbInitialized(true);
       setRetryCount(0); // Reset retry count on success
+      
+      // Initialize non-critical services after InteractionManager
+      InteractionManager.runAfterInteractions(() => {
+        initializeNonCriticalServices();
+      });
+      
     } catch (error) {
       const dbInitTime = Date.now() - dbStartTime;
       crashReporting.reportDatabaseInitializationTime(dbInitTime, false);
       
-      console.error('App initialization failed:', error);
+      console.error('Database initialization failed:', error);
       const errorMessage = error instanceof Error ? error.message : 'Unknown initialization error';
       
       // Report error to crash reporting
@@ -59,14 +139,14 @@ function App() {
       
       setInitError(userFriendlyMessage);
     }
-  }, [setRetryCount, setDbInitialized, setIsRetrying, setInitError, retryCount]);
+  }, [setRetryCount, setDbInitialized, setIsRetrying, setInitError, retryCount, initializeNonCriticalServices]);
 
   const initializeAppWithMonitoring = useCallback(async () => {
-    const startTime = Date.now();
+    startupStartTime = Date.now(); // Reset startup timer
     const crashReporting = CrashReportingService.getInstance();
     
     try {
-      // Initialize crash reporting first
+      // Initialize crash reporting first - this is critical
       await crashReporting.initialize({
         enabled: true,
         provider: 'console',
@@ -78,14 +158,11 @@ function App() {
       // Setup global error handlers
       setupGlobalErrorHandler(crashReporting);
       
-      // Track app startup performance
-      await initializeApp();
-      
-      const appStartupTime = Date.now() - startTime;
-      crashReporting.reportAppStartupTime(appStartupTime);
+      // Initialize database - critical path
+      await initializeDatabase();
       
     } catch (error) {
-      const appStartupTime = Date.now() - startTime;
+      const appStartupTime = Date.now() - startupStartTime;
       crashReporting.reportError(
         error instanceof Error ? error : new Error('Unknown app initialization error'),
         'app_initialization',
@@ -93,22 +170,29 @@ function App() {
       );
       throw error;
     }
-  }, [initializeApp]);
+  }, [initializeDatabase]);
 
   useEffect(() => {
     initializeAppWithMonitoring();
   }, [initializeAppWithMonitoring]);
 
-  const handleRetry = async () => {
+  const handleRetry = useCallback(async () => {
     setIsRetrying(true);
     setInitError(null);
     setDbInitialized(false);
+    setStartupPhase('database');
     setRetryCount(prev => prev + 1);
     
+    // Perform cleanup before retry
+    performCleanup();
+    
     // Brief delay before retry to show loading state
+    trackTimer(setTimeout(() => {
+      // Timer will be cleaned up automatically
+    }, 500));
     await new Promise(resolve => setTimeout(() => resolve(undefined), 500));
-    await initializeApp();
-  };
+    await initializeDatabase();
+  }, [performCleanup, trackTimer, initializeDatabase]);
 
   if (initError) {
     return (
@@ -146,16 +230,34 @@ function App() {
   }
 
   if (!dbInitialized || isRetrying) {
+    const getLoadingMessage = () => {
+      if (isRetrying) return '🔄 Retrying...';
+      if (startupPhase === 'database') return '⏳ Initializing Database...';
+      if (startupPhase === 'services') return '🔧 Loading Services...';
+      return '⏳ Initializing PokePot...';
+    };
+    
+    const getLoadingSubtext = () => {
+      if (startupPhase === 'database') return 'Setting up your poker session data...';
+      if (startupPhase === 'services') return 'Loading app features...';
+      return 'This should take less than 3 seconds';
+    };
+    
     return (
       <View style={styles.container}>
         <StatusBar barStyle={isDarkMode ? 'light-content' : 'dark-content'} />
         <View style={styles.loadingContainer}>
           <Text style={styles.loadingText}>
-            {isRetrying ? '🔄 Retrying...' : '⏳ Initializing PokePot...'}
+            {getLoadingMessage()}
           </Text>
           <Text style={styles.loadingSubtext}>
-            This should take less than 5 seconds
+            {getLoadingSubtext()}
           </Text>
+          {startupPhase === 'services' && (
+            <Text style={styles.loadingProgressText}>
+              Database ready ✅
+            </Text>
+          )}
         </View>
       </View>
     );
@@ -237,6 +339,13 @@ const styles = StyleSheet.create({
     color: '#999',
     textAlign: 'center',
     fontStyle: 'italic',
+  },
+  loadingProgressText: {
+    fontSize: 12,
+    color: '#4CAF50',
+    textAlign: 'center',
+    marginTop: 8,
+    fontWeight: '500',
   },
   errorContainer: {
     flex: 1,

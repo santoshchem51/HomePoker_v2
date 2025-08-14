@@ -166,6 +166,24 @@ export class CrashReportingService {
     }
   }
 
+  public reportServiceInitializationTime(duration: number, successful: boolean): void {
+    this.reportPerformanceMetric({
+      name: 'service_initialization_time',
+      value: duration,
+      unit: 'ms',
+      context: successful ? 'success' : 'failure',
+      timestamp: new Date(),
+    });
+
+    if (duration > 2000) {
+      this.reportError(
+        new Error('Service initialization timeout'),
+        'service_initialization',
+        { duration, successful }
+      );
+    }
+  }
+
   public reportAppStartupTime(duration: number): void {
     this.reportPerformanceMetric({
       name: 'app_startup_time',

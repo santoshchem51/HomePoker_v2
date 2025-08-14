@@ -7,7 +7,7 @@
  * Main poker session screen for recording buy-ins and cash-outs during live games.
  */
 
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, memo } from 'react';
 import {
   View,
   Text,
@@ -18,6 +18,7 @@ import {
 } from 'react-native';
 import { TransactionForm } from './TransactionForm';
 import { useSessionStore } from '../../stores/sessionStore';
+import { useMemoryManagement } from '../../hooks/useMemoryManagement';
 
 interface LiveGameScreenProps {
   sessionId: string;
@@ -25,11 +26,18 @@ interface LiveGameScreenProps {
   onNavigateToHistory?: () => void;
 }
 
-export const LiveGameScreen: React.FC<LiveGameScreenProps> = ({
+const LiveGameScreenComponent: React.FC<LiveGameScreenProps> = ({
   sessionId,
   onEndSession,
   onNavigateToHistory,
 }) => {
+  // Memory management
+  const { addCleanup, trackTimer } = useMemoryManagement({
+    componentName: 'LiveGameScreen',
+    enableAutoCleanup: true,
+    cleanupDelay: 5000
+  });
+
   // Basic loading state
   const [transactionLoading, setTransactionLoading] = useState(false);
 
@@ -49,7 +57,7 @@ export const LiveGameScreen: React.FC<LiveGameScreenProps> = ({
     }
   }, [sessionId, loadSessionState]);
 
-  // Epic 1: Basic transaction handlers
+  // Epic 1: Basic transaction handlers with memory management
   const handleBuyIn = useCallback(async (playerId: string, amount: number): Promise<void> => {
     setTransactionLoading(true);
     try {
@@ -67,6 +75,12 @@ export const LiveGameScreen: React.FC<LiveGameScreenProps> = ({
     try {
       // TODO: Implement cash-out via TransactionService directly since it's not available in sessionStore yet
       console.log('Cash-out transaction:', { sessionId, playerId, amount, organizerConfirmed });
+      
+      // Use tracked timer for async operations
+      trackTimer(setTimeout(() => {
+        setTransactionLoading(false);
+      }, 500));
+      
       await new Promise<void>(resolve => setTimeout(() => resolve(), 500));
     } catch (error) {
       Alert.alert('Transaction Error', 'Failed to record cash-out. Please try again.');
@@ -74,7 +88,14 @@ export const LiveGameScreen: React.FC<LiveGameScreenProps> = ({
     } finally {
       setTransactionLoading(false);
     }
-  }, [sessionId]);
+  }, [sessionId, trackTimer]);
+
+  // Setup cleanup for component state
+  useEffect(() => {
+    addCleanup(() => {
+      setTransactionLoading(false);
+    });
+  }, [addCleanup]);
 
   // Error handling
   if (sessionError) {
@@ -366,6 +387,9 @@ const styles = StyleSheet.create({
     color: '#666',
   },
 });
+
+// Memoized export for performance optimization
+export const LiveGameScreen = memo(LiveGameScreenComponent);
 
 // Note: Epic 3 scope creep features removed during rollback:
 // - Early cash-out calculator modal integration
