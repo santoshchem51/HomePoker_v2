@@ -55,7 +55,7 @@ module.exports = {
   ],
   
   // Verbose output for debugging
-  verbose: true,
+  verbose: false, // Reduce verbosity to prevent hanging
   
   // Test timeout - increased to 30s to prevent timeout errors
   testTimeout: 30000,
@@ -71,6 +71,9 @@ module.exports = {
     enableGlobally: false,
   },
   
-  // Max workers - use 50% of available CPUs
-  maxWorkers: '50%',
+  // Optimize for WSL performance
+  maxWorkers: 1, // Use single worker in WSL to prevent resource conflicts
+  cache: false, // Disable cache to prevent WSL file system issues
+  forceExit: true, // Force exit to prevent hanging processes
+  detectOpenHandles: true, // Detect what's keeping Jest alive
 };
