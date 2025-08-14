@@ -195,12 +195,12 @@ export const useAlternativeSettlements = (
   // Local state for caching and control
   const [lastGenerationTime, setLastGenerationTime] = useState<Date | null>(null);
   const [recommendationCache, setRecommendationCache] = useState<Map<string, SettlementRecommendation>>(new Map());
-  const generationTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const generationTimeoutRef = useRef<number | null>(null);
 
   // Get alternative metrics
   const metrics: AlternativeMetrics = {
     ...getAlternativeMetrics(),
-    lastGeneration: lastGenerationTime,
+    lastGeneration: lastGenerationTime || undefined,
   };
 
   // Core generation function
@@ -610,7 +610,7 @@ export const useAlternativeSettlements = (
     
     // Actions
     clearAlternatives: clearAlternativeResults,
-    clearGenerationError,
+    clearGenerationError: clearAlternativeResults, // Alias for compatibility
     clearSelection,
     
     // Utility functions

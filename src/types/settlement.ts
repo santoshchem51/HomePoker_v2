@@ -625,13 +625,7 @@ export interface ProofIntegrityResult {
   errors: string[];
 }
 
-export interface ExportOperationMetrics {
-  proofId: string;
-  format: ExportFormat;
-  success: boolean;
-  processingTime: number;
-  fileSize: number;
-}
+// Duplicate removed - using ExportOperationMetrics defined later
 
 export enum ProofExportFormat {
   JSON = 'json',
@@ -735,6 +729,40 @@ export interface SettlementRecommendation {
   preferredAlgorithm?: SettlementAlgorithmType;
   prioritizeSimplicity?: boolean;
   prioritizeOptimization?: boolean;
+}
+
+// Using ProofIntegrityResult defined earlier with more complete definition
+
+export interface ExportOperationMetrics {
+  exportId: string;
+  format: ProofExportFormat;
+  fileSize: number;
+  processingTime: number;
+  success: boolean;
+  errorMessage?: string;
+}
+
+export interface ExportOptions {
+  format: ProofExportFormat;
+  includeMetadata?: boolean;
+  compression?: boolean;
+  outputPath?: string;
+}
+
+export interface ExportResult {
+  success: boolean;
+  filePath?: string;
+  fileSize?: number;
+  error?: string;
+  metadata?: ExportMetadata;
+}
+
+export interface ExportMetadata {
+  exportId: string;
+  createdAt: Date;
+  format: ProofExportFormat;
+  proofId: string;
+  version: string;
 }
 
 export interface ManualSettlementOption {

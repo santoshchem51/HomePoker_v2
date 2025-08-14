@@ -5,7 +5,7 @@
  * React Native component for displaying settlement validation results with real-time status
  */
 
-import React, { useCallback, useMemo, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -13,7 +13,6 @@ import {
   ScrollView,
   TouchableOpacity,
   ActivityIndicator,
-  Alert,
   AccessibilityInfo,
   RefreshControl,
 } from 'react-native';
@@ -22,7 +21,6 @@ import {
   SettlementValidation, 
   SettlementError, 
   SettlementWarning,
-  ValidationErrorCode,
   SettlementAuditEntry 
 } from '../../types/settlement';
 
@@ -49,7 +47,7 @@ export const SettlementValidationDisplay: React.FC<SettlementValidationDisplayPr
   showDetailedBreakdown = false,
   accessibilityLabel = 'Settlement Validation Display',
 }) => {
-  const [isValidating, setIsValidating] = useState(false);
+  const [isValidating] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [validationStatus, setValidationStatus] = useState<'pending' | 'valid' | 'invalid' | 'error'>('pending');
 
@@ -296,7 +294,7 @@ export const SettlementValidationDisplay: React.FC<SettlementValidationDisplayPr
     return (
       <View style={styles.auditContainer}>
         <Text style={styles.sectionTitle}>📋 Validation Audit Trail</Text>
-        {validationResults.auditTrail.map((step, index) => (
+        {validationResults.auditTrail.map((step) => (
           <TouchableOpacity
             key={`audit-${step.step}`}
             style={[

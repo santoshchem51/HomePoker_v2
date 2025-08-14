@@ -870,7 +870,7 @@ export const useSettlementStore = create<SettlementState>()(
       
       stopWarningMonitoring: () => {
         const settlementService = SettlementService.getInstance();
-        settlementService.stopRealTimeMonitoring();
+        settlementService.stopRealTimeMonitoring('current-session');
         
         set((state) => ({
           warningState: {
@@ -883,7 +883,15 @@ export const useSettlementStore = create<SettlementState>()(
       recordManualAdjustment: async (sessionId: string, adjustment: any): Promise<void> => {
         try {
           const settlementService = SettlementService.getInstance();
-          await settlementService.recordManualAdjustment(sessionId, adjustment);
+          await settlementService.recordManualAdjustment(
+            sessionId, 
+            undefined, // playerId
+            'BALANCE_ADJUSTMENT', 
+            'balance', // fieldChanged
+            0, // previousValue
+            adjustment, // newValue
+            'user' // adjustedBy
+          );
           
           // Update active warnings
           const activeWarnings = await settlementService.getActiveWarnings(sessionId);
@@ -906,7 +914,7 @@ export const useSettlementStore = create<SettlementState>()(
       resolveWarning: async (warningId: string, resolution: string): Promise<void> => {
         try {
           const settlementService = SettlementService.getInstance();
-          await settlementService.resolveWarning(warningId, resolution);
+          await settlementService.resolveWarning(warningId, resolution, 'user');
           
           set((state) => {
             const updatedWarnings = state.warningState.activeWarnings.filter(w => w.warningId !== warningId);
@@ -1121,17 +1129,7 @@ export const useSettlementStore = create<SettlementState>()(
             isGeneratingAlternatives: true,
             alternativeError: null,
             alternativeProgress: 10,
-            generationOptions: options ? {
-              enabledAlgorithms: options.enabledAlgorithms || ['greedy_debt_reduction'],
-              maxAlternatives: options.maxAlternatives || 3,
-              includePerformanceMetrics: options.includePerformanceMetrics || false,
-              enableOptimizationComparison: options.enableOptimizationComparison || true,
-              filterCriteria: options.filterCriteria || {
-                minImprovement: 10,
-                maxComplexity: 0.8,
-                preferredTransactionCount: 'minimize'
-              }
-            } : null,
+            generationOptions: options || null,
           },
         }));
         

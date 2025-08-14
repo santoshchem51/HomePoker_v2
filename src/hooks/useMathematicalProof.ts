@@ -161,7 +161,7 @@ export const useMathematicalProof = (
 
   // Local state for async operations
   const [isExporting, setIsExporting] = useState(false);
-  const proofTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const proofTimeoutRef = useRef<number | null>(null);
 
   // Get proof metrics
   const metrics: ProofMetrics = {
@@ -231,8 +231,10 @@ export const useMathematicalProof = (
   const generateProofAsync = useCallback(async (settlement: OptimizedSettlement): Promise<MathematicalProof> => {
     setProofProgress(0);
     
+    let currentProgress = 0;
     const progressInterval = setInterval(() => {
-      setProofProgress(prev => Math.min(prev + 10, 90));
+      currentProgress = Math.min(currentProgress + 10, 90);
+      setProofProgress(currentProgress);
     }, 500);
     
     try {
