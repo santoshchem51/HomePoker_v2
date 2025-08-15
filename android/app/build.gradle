@@ -139,7 +139,6 @@ android {
             proguardFiles getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro"
             
             // Bundle optimization
-            bundleInRelease true
             zipAlignEnabled true
             
             // APK splitting for smaller download size

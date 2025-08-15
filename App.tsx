@@ -5,17 +5,21 @@
  */
 
 import React, { useEffect, useState, useCallback } from 'react';
-import { StatusBar, StyleSheet, useColorScheme, View, Text, TouchableOpacity, InteractionManager } from 'react-native';
+import { StatusBar, StyleSheet, View, Text, TouchableOpacity, InteractionManager } from 'react-native';
 import { DatabaseService } from './src/services/infrastructure/DatabaseService';
 import { CrashReportingService, setupGlobalErrorHandler } from './src/services/monitoring/CrashReportingService';
 import { StartupOptimizer } from './src/utils/startup-optimization';
 import { useMemoryManagement, useMemoryMonitoring } from './src/hooks/useMemoryManagement';
+import { ThemeProvider, useTheme } from './src/contexts/ThemeContext';
+import { BrightnessOverlay } from './src/components/common/BrightnessControl';
+import { DarkPokerColors } from './src/styles/darkTheme.styles';
 
 // Performance monitoring for startup
 let startupStartTime = Date.now();
 
-function App() {
-  const isDarkMode = useColorScheme() === 'dark';
+// Themed App Content Component
+function ThemedAppContent() {
+  const { isDarkMode, brightness } = useTheme();
   const [dbInitialized, setDbInitialized] = useState(false);
   const [initError, setInitError] = useState<string | null>(null);
   const [retryCount, setRetryCount] = useState(0);
@@ -196,28 +200,43 @@ function App() {
 
   if (initError) {
     return (
-      <View style={styles.container}>
+      <View style={[styles.container, { backgroundColor: isDarkMode ? DarkPokerColors.background : '#f5f5f5' }]}>
         <StatusBar barStyle={isDarkMode ? 'light-content' : 'dark-content'} />
-        <View style={styles.errorContainer}>
-          <Text style={styles.errorTitle}>🚫 Initialization Failed</Text>
-          <Text style={styles.errorText}>{initError}</Text>
+        <View style={[styles.errorContainer, { backgroundColor: isDarkMode ? DarkPokerColors.background : '#f5f5f5' }]}>
+          <Text style={[styles.errorTitle, { color: isDarkMode ? DarkPokerColors.error : '#F44336' }]}>
+            🚫 Initialization Failed
+          </Text>
+          <Text style={[styles.errorText, { color: isDarkMode ? DarkPokerColors.primaryText : '#666' }]}>
+            {initError}
+          </Text>
           {retryCount > 0 && (
-            <Text style={styles.retryCountText}>Attempt {retryCount + 1}</Text>
+            <Text style={[styles.retryCountText, { color: isDarkMode ? DarkPokerColors.error : '#F44336' }]}>
+              Attempt {retryCount + 1}
+            </Text>
           )}
           <TouchableOpacity 
-            style={[styles.retryButton, isRetrying && styles.retryButtonDisabled]} 
+            style={[
+              styles.retryButton, 
+              { backgroundColor: isDarkMode ? DarkPokerColors.buttonPrimary : '#2196F3' },
+              isRetrying && styles.retryButtonDisabled
+            ]} 
             onPress={handleRetry}
             disabled={isRetrying}
           >
-            <Text style={styles.retryButtonText}>
+            <Text style={[styles.retryButtonText, { color: isDarkMode ? DarkPokerColors.background : '#fff' }]}>
               {isRetrying ? 'Retrying...' : 'Try Again'}
             </Text>
           </TouchableOpacity>
           
           {retryCount >= 2 && (
-            <View style={styles.helpContainer}>
-              <Text style={styles.helpText}>Still having trouble?</Text>
-              <Text style={styles.helpSubtext}>
+            <View style={[styles.helpContainer, {
+              backgroundColor: isDarkMode ? DarkPokerColors.cardBackground : '#FFF3E0',
+              borderColor: isDarkMode ? DarkPokerColors.warning : '#FFB74D',
+            }]}>
+              <Text style={[styles.helpText, { color: isDarkMode ? DarkPokerColors.warning : '#E65100' }]}>
+                Still having trouble?
+              </Text>
+              <Text style={[styles.helpSubtext, { color: isDarkMode ? DarkPokerColors.secondaryText : '#BF360C' }]}>
                 • Check your device storage space{'\n'}
                 • Restart the app{'\n'}
                 • Contact support if the problem persists
@@ -225,6 +244,7 @@ function App() {
             </View>
           )}
         </View>
+        <BrightnessOverlay brightness={brightness} />
       </View>
     );
   }
@@ -244,39 +264,97 @@ function App() {
     };
     
     return (
-      <View style={styles.container}>
+      <View style={[styles.container, { backgroundColor: isDarkMode ? DarkPokerColors.background : '#f5f5f5' }]}>
         <StatusBar barStyle={isDarkMode ? 'light-content' : 'dark-content'} />
-        <View style={styles.loadingContainer}>
-          <Text style={styles.loadingText}>
+        <View style={[styles.loadingContainer, { backgroundColor: isDarkMode ? DarkPokerColors.background : '#f5f5f5' }]}>
+          <Text style={[styles.loadingText, { color: isDarkMode ? DarkPokerColors.primaryText : '#666' }]}>
             {getLoadingMessage()}
           </Text>
-          <Text style={styles.loadingSubtext}>
+          <Text style={[styles.loadingSubtext, { color: isDarkMode ? DarkPokerColors.secondaryText : '#999' }]}>
             {getLoadingSubtext()}
           </Text>
           {startupPhase === 'services' && (
-            <Text style={styles.loadingProgressText}>
+            <Text style={[styles.loadingProgressText, { color: isDarkMode ? DarkPokerColors.success : '#4CAF50' }]}>
               Database ready ✅
             </Text>
           )}
         </View>
+        <BrightnessOverlay brightness={brightness} />
       </View>
     );
   }
 
+  // Dynamic styles available if needed
+  // const dynamicStyles = getDynamicStyles(isDarkMode);
+
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: isDarkMode ? DarkPokerColors.background : '#f5f5f5' }]}>
       <StatusBar barStyle={isDarkMode ? 'light-content' : 'dark-content'} />
-      <View style={styles.workingContainer}>
-        <Text style={styles.workingTitle}>🎰 PokePot</Text>
-        <Text style={styles.workingSubtitle}>Epic 1 Complete ✅</Text>
-        <TouchableOpacity style={styles.workingButton}>
-          <Text style={styles.workingButtonText}>Start New Session</Text>
+      
+      <View style={[styles.workingContainer, { backgroundColor: isDarkMode ? DarkPokerColors.background : '#f5f5f5' }]}>
+        <Text style={[styles.workingTitle, { color: isDarkMode ? DarkPokerColors.goldChip : '#2196F3' }]}>
+          🎰 PokePot
+        </Text>
+        <Text style={[styles.workingSubtitle, { color: isDarkMode ? DarkPokerColors.success : '#4CAF50' }]}>
+          Epic 1 Complete ✅ | Epic 2 Dark Mode ✅
+        </Text>
+        
+        <TouchableOpacity style={[styles.workingButton, { 
+          backgroundColor: isDarkMode ? DarkPokerColors.buttonPrimary : '#2196F3' 
+        }]}>
+          <Text style={[styles.workingButtonText, { 
+            color: isDarkMode ? DarkPokerColors.background : '#fff' 
+          }]}>
+            Start New Session
+          </Text>
         </TouchableOpacity>
-        <Text style={styles.workingStatus}>App is working in your emulator!</Text>
+        
+        <Text style={[styles.workingStatus, { color: isDarkMode ? DarkPokerColors.secondaryText : '#666' }]}>
+          Dark mode & poker room optimization active!
+        </Text>
+        
+        {/* Theme indicator */}
+        <Text style={[styles.themeIndicator, { color: isDarkMode ? DarkPokerColors.selected : '#FFC107' }]}>
+          🌙 Theme: {isDarkMode ? 'Dark (Poker Optimized)' : 'Light'} | 
+          🔆 Brightness: {Math.round(brightness * 100)}%
+        </Text>
       </View>
+      
+      {/* Brightness overlay for independent brightness control */}
+      <BrightnessOverlay brightness={brightness} />
     </View>
   );
 }
+
+// Main App component with ThemeProvider wrapper
+function App() {
+  return (
+    <ThemeProvider>
+      <ThemedAppContent />
+    </ThemeProvider>
+  );
+}
+
+// Dynamic styles helper function
+const getDynamicStyles = (isDarkMode: boolean) => {
+  return {
+    container: {
+      backgroundColor: isDarkMode ? DarkPokerColors.background : '#f5f5f5',
+    },
+    text: {
+      color: isDarkMode ? DarkPokerColors.primaryText : '#333',
+    },
+    secondaryText: {
+      color: isDarkMode ? DarkPokerColors.secondaryText : '#666',
+    },
+    button: {
+      backgroundColor: isDarkMode ? DarkPokerColors.buttonPrimary : '#2196F3',
+    },
+    buttonText: {
+      color: isDarkMode ? DarkPokerColors.background : '#fff',
+    },
+  };
+};
 
 const styles = StyleSheet.create({
   container: {
@@ -408,6 +486,13 @@ const styles = StyleSheet.create({
     color: '#BF360C',
     textAlign: 'left',
     lineHeight: 20,
+  },
+  themeIndicator: {
+    fontSize: 14,
+    textAlign: 'center',
+    marginTop: 16,
+    fontWeight: '500',
+    fontStyle: 'italic',
   },
 });
 

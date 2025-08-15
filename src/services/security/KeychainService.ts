@@ -300,7 +300,7 @@ export class KeychainService {
     }
   }
   
-  private async platformGetItem(key: string, service: string): Promise<string | null> {
+  private async platformGetItem(key: string, _service: string): Promise<string | null> {
     try {
       // In a real React Native implementation, this would retrieve from:
       // - iOS: Keychain Services API
@@ -317,7 +317,7 @@ export class KeychainService {
     }
   }
   
-  private async platformRemoveItem(key: string, service: string): Promise<boolean> {
+  private async platformRemoveItem(key: string, _service: string): Promise<boolean> {
     try {
       // In a real React Native implementation, this would remove from keychain
       

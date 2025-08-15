@@ -97,7 +97,7 @@ export const useMemoryManagement = (options: UseMemoryManagementOptions) => {
       
       trackTimer(cleanupTimeoutRef.current);
     }
-  }, [enableAutoCleanup, cleanupDelay, trackTimer]);
+  }, [enableAutoCleanup, cleanupDelay, trackTimer, monitor]);
 
   // Setup component lifecycle management
   useEffect(() => {
