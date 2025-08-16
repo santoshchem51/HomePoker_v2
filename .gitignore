@@ -99,3 +99,62 @@ coverage/
 
 # Project specific
 # Keep documentation and .bmad-core for development agent configuration
+
+# Screenshots and demo files
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.mp4
+*.mov
+*.avi
+screenshot*.png
+journey*.png
+journey*.mp4
+pokepot*.png
+session*.png
+debug*.png
+after*.png
+current*.png
+home*.png
+view*.png
+app*.png
+dev*.png
+settings*.png
+
+# Temporary test files
+test-*.js
+validation-*.js
+memory-test*.js
+run-test*.js
+trace-*.js
+
+# Build helper scripts (keep the main ones tracked)
+find-*.bat
+find-*.ps1
+set-*.bat
+setup-*.bat
+fix-*.bat
+rebuild-*.bat
+build-*.sh
+build-*.ps1
+!build-android.bat
+!build-release.bat
+!build-release-windows.bat
+!run-android.bat
+
+# Validation reports and temporary documentation
+VALIDATION_*.md
+*_REPORT.md
+*_DEMO.md
+*_ASSESSMENT.md
+*_PACKAGE.md
+validation-reports/
+
+# Local settings
+.claude/
+nul
+
+# Temporary utility scripts
+test-custom-id.js
+test-uuid.js
