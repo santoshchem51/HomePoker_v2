@@ -66,18 +66,20 @@ export class SettlementService {
       // Get player's current chips and total buy-ins
       const transactionService = TransactionService.getInstance();
 
-      // Get player buy-ins total
+      // Get player buy-ins and cash-outs total
       const allTransactions = await transactionService.getTransactionHistory(sessionId);
       const playerTransactions = allTransactions.filter(t => t.playerId === playerId && !t.isVoided);
       const buyIns = playerTransactions.filter(t => t.type === 'buy_in');
+      const cashOuts = playerTransactions.filter(t => t.type === 'cash_out');
       const totalBuyIns = buyIns.reduce((sum, t) => sum + t.amount, 0);
+      const totalCashOuts = cashOuts.reduce((sum, t) => sum + t.amount, 0);
 
       // Get player's current chip count (from last transaction or session state)
       const playerData = await this.getPlayerData(sessionId, playerId);
       const currentChips = playerData.currentBalance || 0;
 
-      // Calculate net position: chips - buy-ins
-      const netPosition = currentChips - totalBuyIns;
+      // Calculate net position: (chips + cash-outs) - buy-ins
+      const netPosition = (currentChips + totalCashOuts) - totalBuyIns;
       
       // Calculate settlement amount (what player owes or is owed)
       const settlementAmount = netPosition >= 0 ? netPosition : Math.abs(netPosition);
@@ -92,6 +94,7 @@ export class SettlementService {
         playerName: playerData.name,
         currentChips,
         totalBuyIns,
+        totalCashOuts,
         netPosition,
         settlementAmount,
         owesOrOwed,
@@ -274,7 +277,7 @@ export class SettlementService {
   private async getPlayerData(sessionId: string, playerId: string): Promise<any> {
     const dbService = DatabaseService.getInstance();
     const result = await dbService.executeQuery(
-      'SELECT name, currentBalance FROM players WHERE sessionId = ? AND playerId = ?',
+      'SELECT name, current_balance as currentBalance FROM players WHERE session_id = ? AND id = ?',
       [sessionId, playerId]
     );
     return result.rows.length > 0 ? result.rows.item(0) : { name: 'Unknown Player', currentBalance: 0 };
@@ -287,7 +290,7 @@ export class SettlementService {
       
       // Get all players for this session
       const playersResult = await dbService.executeQuery(
-        'SELECT playerId, name, currentBalance FROM players WHERE sessionId = ?',
+        'SELECT id as playerId, name, current_balance as currentBalance FROM players WHERE session_id = ?',
         [sessionId]
       );
 
@@ -303,14 +306,34 @@ export class SettlementService {
           .filter(t => t.type === 'buy_in')
           .reduce((sum, t) => sum + t.amount, 0);
 
-        const currentChips = player.currentBalance || 0;
-        const netAmount = currentChips - totalBuyIns;
+        const totalCashOuts = playerTransactions
+          .filter(t => t.type === 'cash_out')
+          .reduce((sum, t) => sum + t.amount, 0);
+
+        const currentChips = parseFloat(player.currentBalance) || 0;
+        // Net amount = what player would receive/pay if they cashed out now
+        // For active sessions: treat current chips as if they were cashed out
+        // For completed sessions: use actual cash-out amounts
+        const projectedCashOut = totalCashOuts > 0 ? totalCashOuts : currentChips;
+        const netAmount = projectedCashOut - totalBuyIns;
+        
+        // Debug logging for settlement calculation
+        console.log(`Settlement Debug - ${player.name}:`, {
+          playerId: player.playerId,
+          currentChips,
+          totalBuyIns,
+          totalCashOuts,
+          projectedCashOut,
+          netAmount,
+          calculation: `${projectedCashOut} (projected cash-out) - ${totalBuyIns} buy-ins = ${netAmount}`
+        });
 
         settlements.push({
           playerId: player.playerId,
           playerName: player.name,
           currentChips,
           totalBuyIns,
+          totalCashOuts: projectedCashOut, // Use projected for settlement display
           netAmount,
           owesOrOwed: netAmount >= 0 ? 'owed' : 'owes'
         });
@@ -399,9 +422,10 @@ export class SettlementService {
       message += '👥 Player Summary:\n';
       settlement.playerSettlements.forEach(player => {
         const netSign = player.netAmount >= 0 ? '+' : '';
-        const cashOuts = player.totalBuyIns + player.netAmount; // Calculate cash outs from buy-ins and net
+        // Use actual cash-outs from the player data, not calculated value
+        const actualCashOuts = player.totalCashOuts || 0;
         message += `• ${player.playerName}: $${player.totalBuyIns} in → `;
-        message += `$${cashOuts.toFixed(0)} out = ${netSign}$${player.netAmount.toFixed(0)}\n`;
+        message += `$${actualCashOuts.toFixed(0)} out = ${netSign}$${player.netAmount.toFixed(0)}\n`;
       });
 
       message += '\n';

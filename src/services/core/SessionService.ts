@@ -125,7 +125,11 @@ export class SessionService {
           playerCount: currentPlayers.length + 1
         });
 
-        return player;
+        // Return player with initialBuyIn info for external transaction handling
+        return {
+          ...player,
+          initialBuyIn: playerData.initialBuyIn
+        };
       });
     } catch (error) {
       if (error instanceof ServiceError) {
@@ -339,6 +343,39 @@ export class SessionService {
    * Get session history for completed games
    * Story 1.7: AC 6
    */
+  public async getActiveSessions(): Promise<Session[]> {
+    try {
+      const query = `
+        SELECT s.* 
+        FROM sessions s
+        WHERE s.status IN ('created', 'active')
+        ORDER BY s.created_at DESC
+      `;
+      
+      const result = await this.dbService.executeQuery(query, []);
+      
+      const sessions: Session[] = [];
+      for (let i = 0; i < result.rows.length; i++) {
+        const row = result.rows.item(i);
+        sessions.push({
+          id: row.id,
+          name: row.name,
+          organizerId: row.organizer_id,
+          status: row.status,
+          createdAt: new Date(row.created_at),
+          startedAt: row.started_at ? new Date(row.started_at) : undefined,
+          completedAt: row.completed_at ? new Date(row.completed_at) : undefined,
+          totalPot: 0, // Will be calculated from transactions
+          playerCount: 0 // Will be calculated from players
+        });
+      }
+      
+      return sessions;
+    } catch (error) {
+      throw new ServiceError('FETCH_ACTIVE_SESSIONS_FAILED', `Failed to fetch active sessions: ${error}`, { error });
+    }
+  }
+
   public async getSessionHistory(limit: number = 30): Promise<Session[]> {
     try {
       const thirtyDaysAgo = new Date();
@@ -360,7 +397,24 @@ export class SessionService {
         limit
       ]);
       
-      return result.rows.raw();
+      // Map the raw database rows to proper Session objects
+      const sessions = result.rows.raw().map((row: any) => ({
+        id: row.id,
+        name: row.name,
+        organizerId: row.organizer_id,
+        status: row.status,
+        createdAt: row.created_at ? new Date(row.created_at) : new Date(),
+        startedAt: row.started_at ? new Date(row.started_at) : undefined,
+        completedAt: row.completed_at ? new Date(row.completed_at) : undefined,
+        totalPot: row.total_pot !== null && row.total_pot !== undefined 
+          ? parseFloat(row.total_pot) 
+          : 0,
+        playerCount: row.player_count || 0,
+        cleanupAt: row.cleanup_at ? new Date(row.cleanup_at) : undefined,
+        has_export: row.has_export === 1
+      }));
+      
+      return sessions;
     } catch (error) {
       throw new ServiceError(ErrorCode.UNKNOWN_ERROR, `Failed to get session history: ${error}`);
     }

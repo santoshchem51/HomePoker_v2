@@ -29,7 +29,7 @@ module.exports = {
   
   // Transform ignore patterns - updated to include all necessary RN packages
   transformIgnorePatterns: [
-    'node_modules/(?!(react-native|@react-native|react-native-sqlite-storage|react-native-gesture-handler|@react-native-voice|react-native-qrcode-svg|react-native-fs|@react-native-clipboard|@react-native-picker|@react-native-async-storage)/)',
+    'node_modules/(?!(react-native|@react-native|@react-navigation|react-native-sqlite-storage|react-native-gesture-handler|@react-native-voice|react-native-qrcode-svg|react-native-fs|@react-native-clipboard|@react-native-picker|@react-native-async-storage)/)',
   ],
   
   // Setup files

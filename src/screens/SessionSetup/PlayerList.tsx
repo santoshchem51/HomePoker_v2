@@ -18,7 +18,7 @@ import { PlayerCard } from './PlayerCard';
 
 export interface PlayerListProps {
   players: Player[];
-  onAddPlayer: (playerName: string) => Promise<void>;
+  onAddPlayer: (playerName: string, buyInAmount: number) => Promise<void>;
   onRemovePlayer: (playerId: string) => Promise<void>;
   loading: boolean;
   maxPlayers: number;
@@ -34,6 +34,7 @@ export const PlayerList: React.FC<PlayerListProps> = ({
   minPlayers
 }) => {
   const [newPlayerName, setNewPlayerName] = useState('');
+  const [buyInAmount, setBuyInAmount] = useState('');
   const [addingPlayer, setAddingPlayer] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -48,8 +49,17 @@ export const PlayerList: React.FC<PlayerListProps> = ({
       return 'Player name is required';
     }
     
+    if (trimmedName.length < 2) {
+      return 'Player name must be at least 2 characters';
+    }
+    
     if (trimmedName.length > 50) {
       return 'Player name must be 50 characters or less';
+    }
+
+    // Check for invalid characters or placeholder-like names
+    if (/^[a-z]+\d+$|^s\d+$|something/i.test(trimmedName)) {
+      return 'Please enter a real player name (avoid placeholder text like "player1", "s5", etc.)';
     }
 
     // Check for duplicate names (case insensitive)
@@ -65,14 +75,58 @@ export const PlayerList: React.FC<PlayerListProps> = ({
   };
 
   /**
-   * Handle adding a new player
+   * Validate buy-in amount input
+   */
+  const validateBuyInAmount = (amount: string): string | null => {
+    const trimmedAmount = amount.trim();
+    
+    if (!trimmedAmount) {
+      return 'Buy-in amount is required';
+    }
+
+    const numAmount = parseFloat(trimmedAmount);
+    
+    if (isNaN(numAmount)) {
+      return 'Buy-in amount must be a valid number';
+    }
+
+    if (numAmount <= 0) {
+      return 'Buy-in amount must be positive';
+    }
+
+    if (numAmount < 1) {
+      return 'Buy-in amount must be at least $1';
+    }
+
+    if (numAmount > 500) {
+      return 'Buy-in amount cannot exceed $500';
+    }
+
+    if (!Number.isInteger(numAmount * 100)) {
+      return 'Buy-in amount cannot have more than 2 decimal places';
+    }
+
+    return null;
+  };
+
+  /**
+   * Handle adding a new player with buy-in
    * AC: 2, 3
    */
   const handleAddPlayer = async () => {
-    const validationError = validatePlayerName(newPlayerName);
-    if (validationError) {
-      setError(validationError);
-      Alert.alert('Invalid Input', validationError);
+    // Validate player name
+    const nameValidationError = validatePlayerName(newPlayerName);
+    if (nameValidationError) {
+      setError(nameValidationError);
+      Alert.alert('Invalid Input', nameValidationError);
+      return;
+    }
+
+    // Validate buy-in amount
+    const buyInValidationError = validateBuyInAmount(buyInAmount);
+    if (buyInValidationError) {
+      setError(buyInValidationError);
+      Alert.alert('Invalid Buy-in Amount', buyInValidationError);
       return;
     }
 
@@ -87,8 +141,10 @@ export const PlayerList: React.FC<PlayerListProps> = ({
     setError(null);
 
     try {
-      await onAddPlayer(newPlayerName.trim());
+      const buyInValue = parseFloat(buyInAmount.trim());
+      await onAddPlayer(newPlayerName.trim(), buyInValue);
       setNewPlayerName('');
+      setBuyInAmount('');
     } catch (err) {
       // Error handling is done in parent component
     } finally {
@@ -115,6 +171,28 @@ export const PlayerList: React.FC<PlayerListProps> = ({
     if (error) {
       setError(null);
     }
+  };
+
+  /**
+   * Format buy-in amount input
+   */
+  const handleBuyInAmountChange = (text: string) => {
+    // Remove any non-numeric characters except decimal point
+    const cleaned = text.replace(/[^0-9.]/g, '');
+    
+    // Prevent multiple decimal points
+    const parts = cleaned.split('.');
+    if (parts.length > 2) {
+      return;
+    }
+    
+    // Limit decimal places to 2
+    if (parts[1] && parts[1].length > 2) {
+      return;
+    }
+    
+    setBuyInAmount(cleaned);
+    clearError();
   };
 
   /**
@@ -146,21 +224,41 @@ export const PlayerList: React.FC<PlayerListProps> = ({
 
       {/* Add Player Input */}
       <View style={styles.addPlayerContainer}>
-        <TextInput
-          style={[
-            styles.addPlayerInput,
-            error ? styles.addPlayerInputError : null
-          ]}
-          value={newPlayerName}
-          onChangeText={(text) => {
-            setNewPlayerName(text);
-            clearError();
-          }}
-          placeholder="Enter player name"
-          maxLength={50}
-          editable={canAddPlayer}
-          testID="add-player-input"
-        />
+        <View style={styles.inputRow}>
+          <TextInput
+            style={[
+              styles.addPlayerInput,
+              styles.nameInput,
+              error ? styles.addPlayerInputError : null
+            ]}
+            value={newPlayerName}
+            onChangeText={(text) => {
+              setNewPlayerName(text);
+              clearError();
+            }}
+            placeholder="Enter player name"
+            maxLength={50}
+            editable={canAddPlayer}
+            testID="add-player-input"
+          />
+          <View style={styles.buyInInputContainer}>
+            <Text style={styles.currencySymbol}>$</Text>
+            <TextInput
+              style={[
+                styles.addPlayerInput,
+                styles.buyInInput,
+                error ? styles.addPlayerInputError : null
+              ]}
+              value={buyInAmount}
+              onChangeText={handleBuyInAmountChange}
+              placeholder="Buy-in"
+              keyboardType="numeric"
+              maxLength={6}
+              editable={canAddPlayer}
+              testID="buy-in-input"
+            />
+          </View>
+        </View>
         <TouchableOpacity
           style={[
             styles.addPlayerButton,
@@ -269,18 +367,48 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   addPlayerContainer: {
-    flexDirection: 'row',
     marginBottom: 12,
   },
+  inputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
   addPlayerInput: {
-    flex: 1,
     borderWidth: 1,
     borderColor: '#ddd',
     borderRadius: 8,
     padding: 12,
-    marginRight: 8,
     fontSize: 16,
     backgroundColor: '#f9f9f9',
+  },
+  nameInput: {
+    flex: 2,
+    marginRight: 8,
+  },
+  buyInInputContainer: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 8,
+    backgroundColor: '#f9f9f9',
+    marginRight: 8,
+  },
+  currencySymbol: {
+    paddingLeft: 12,
+    paddingRight: 4,
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#666',
+  },
+  buyInInput: {
+    flex: 1,
+    padding: 12,
+    fontSize: 16,
+    backgroundColor: 'transparent',
+    borderWidth: 0,
   },
   addPlayerInputError: {
     borderColor: '#ff4444',

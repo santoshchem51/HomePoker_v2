@@ -27,6 +27,7 @@ export interface PlayerData {
   name: string;
   isGuest?: boolean;
   profileId?: string;
+  initialBuyIn?: number;
 }
 
 export interface PlayerSummary {

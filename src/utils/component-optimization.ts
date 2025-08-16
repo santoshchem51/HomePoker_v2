@@ -284,16 +284,11 @@ export const withOptimization = <P extends object>(
  */
 export const BundleOptimizationUtils = {
   /**
-   * Dynamically import utilities
+   * Dynamic imports are not supported in React Native production builds
+   * This method is disabled for production compatibility
    */
-  dynamicImport: async <T>(modulePath: string): Promise<T> => {
-    try {
-      const module = await import(modulePath);
-      return module.default || module;
-    } catch (error) {
-      console.error(`Failed to dynamically import ${modulePath}:`, error);
-      throw error;
-    }
+  dynamicImport: async <T>(_modulePath: string): Promise<T> => {
+    throw new Error('Dynamic imports are not supported in React Native');
   },
 
   /**

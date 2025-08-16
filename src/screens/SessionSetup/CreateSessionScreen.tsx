@@ -13,28 +13,31 @@ import {
   KeyboardAvoidingView,
   Platform
 } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
+import { StackNavigationProp } from '@react-navigation/stack';
+import { RootStackParamList } from '../../navigation/AppNavigator';
 import { SessionForm } from './SessionForm';
 import { PlayerList } from './PlayerList';
 import { SessionService } from '../../services/core/SessionService';
+import { TransactionService } from '../../services/core/TransactionService';
 import { Session } from '../../types/session';
 import { Player } from '../../types/player';
 import { ServiceError } from '../../services/core/ServiceError';
+import { useTheme } from '../../contexts/ThemeContext';
+import { DarkPokerColors } from '../../styles/darkTheme.styles';
 
-export interface CreateSessionScreenProps {
-  onSessionCreated?: (session: Session) => void;
-  onStartGame?: (sessionId: string) => void;
-}
+type CreateSessionScreenNavigationProp = StackNavigationProp<RootStackParamList, 'CreateSession'>;
 
-export const CreateSessionScreen: React.FC<CreateSessionScreenProps> = ({
-  onSessionCreated,
-  onStartGame
-}) => {
+export const CreateSessionScreen: React.FC = () => {
+  const navigation = useNavigation<CreateSessionScreenNavigationProp>();
+  const { isDarkMode } = useTheme();
   const [session, setSession] = useState<Session | null>(null);
   const [players, setPlayers] = useState<Player[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const sessionService = SessionService.getInstance();
+  const transactionService = TransactionService.getInstance();
 
   /**
    * Handle session creation from the form
@@ -51,11 +54,13 @@ export const CreateSessionScreen: React.FC<CreateSessionScreenProps> = ({
       });
 
       setSession(newSession);
-      onSessionCreated?.(newSession);
     } catch (err) {
+      console.error('Session creation error:', err);
       const errorMessage = err instanceof ServiceError 
         ? err.message 
-        : 'Failed to create session. Please try again.';
+        : err instanceof Error 
+          ? `Error: ${err.message}` 
+          : 'Failed to create session. Please try again.';
       setError(errorMessage);
       
       // Show alert for user feedback
@@ -66,22 +71,43 @@ export const CreateSessionScreen: React.FC<CreateSessionScreenProps> = ({
   };
 
   /**
-   * Handle adding a player to the session
+   * Handle adding a player to the session with buy-in
    * AC: 2, 3
    */
-  const handleAddPlayer = async (playerName: string) => {
+  const handleAddPlayer = async (playerName: string, buyInAmount: number) => {
     if (!session) return;
 
     setLoading(true);
     setError(null);
 
     try {
+      // Add the player first
       const newPlayer = await sessionService.addPlayer(session.id, {
         name: playerName,
-        isGuest: true
+        isGuest: true,
+        initialBuyIn: buyInAmount
       });
 
-      setPlayers(prev => [...prev, newPlayer]);
+      // Record initial buy-in transaction if provided
+      if (buyInAmount && buyInAmount > 0) {
+        await transactionService.recordBuyIn(
+          session.id,
+          newPlayer.id,
+          buyInAmount,
+          'manual',
+          'organizer',
+          `Initial buy-in for ${newPlayer.name}`
+        );
+      }
+
+      // Update player with buy-in reflected
+      const playerWithBuyIn = {
+        ...newPlayer,
+        currentBalance: buyInAmount || 0,
+        totalBuyIns: buyInAmount || 0
+      };
+
+      setPlayers(prev => [...prev, playerWithBuyIn]);
       
       // Update session player count
       setSession(prev => prev ? { ...prev, playerCount: prev.playerCount + 1 } : null);
@@ -158,7 +184,10 @@ export const CreateSessionScreen: React.FC<CreateSessionScreenProps> = ({
             setLoading(true);
             try {
               await sessionService.updateSessionStatus(session.id, 'active');
-              onStartGame?.(session.id);
+              navigation.navigate('LiveGame', { 
+                sessionId: session.id, 
+                sessionName: session.name 
+              });
             } catch (err) {
               const errorMessage = err instanceof ServiceError 
                 ? err.message 
@@ -181,12 +210,12 @@ export const CreateSessionScreen: React.FC<CreateSessionScreenProps> = ({
 
   return (
     <KeyboardAvoidingView 
-      style={styles.container}
+      style={[styles.container, { backgroundColor: isDarkMode ? DarkPokerColors.background : '#f5f5f5' }]}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
-      <ScrollView style={styles.scrollView} keyboardShouldPersistTaps="handled">
-        <View style={styles.header}>
-          <Text style={styles.title}>Create New Session</Text>
+      <ScrollView style={[styles.scrollView, { backgroundColor: isDarkMode ? DarkPokerColors.background : '#f5f5f5' }]} keyboardShouldPersistTaps="handled">
+        <View style={[styles.header, { backgroundColor: isDarkMode ? DarkPokerColors.cardBackground : '#fff' }]}>
+          <Text style={[styles.title, { color: isDarkMode ? DarkPokerColors.primaryText : '#333' }]}>Create New Session</Text>
           {error && (
             <View style={styles.errorContainer}>
               <Text style={styles.errorText}>{error}</Text>
@@ -205,9 +234,12 @@ export const CreateSessionScreen: React.FC<CreateSessionScreenProps> = ({
         {/* Player Management */}
         {session && (
           <>
-            <View style={styles.sessionInfo}>
-              <Text style={styles.sessionName}>{session.name}</Text>
-              <Text style={styles.sessionStatus}>
+            <View style={[styles.sessionInfo, { 
+              backgroundColor: isDarkMode ? DarkPokerColors.surfaceBackground : '#f0f8ff',
+              borderColor: isDarkMode ? DarkPokerColors.border : '#007AFF'
+            }]}>
+              <Text style={[styles.sessionName, { color: isDarkMode ? DarkPokerColors.primaryText : '#333' }]}>{session.name}</Text>
+              <Text style={[styles.sessionStatus, { color: isDarkMode ? DarkPokerColors.secondaryText : '#666' }]}>
                 Status: {session.status.charAt(0).toUpperCase() + session.status.slice(1)}
               </Text>
             </View>
@@ -225,7 +257,9 @@ export const CreateSessionScreen: React.FC<CreateSessionScreenProps> = ({
             <TouchableOpacity
               style={[
                 styles.startButton,
-                canStartGame ? styles.startButtonEnabled : styles.startButtonDisabled
+                canStartGame 
+                  ? { ...styles.startButtonEnabled, backgroundColor: isDarkMode ? DarkPokerColors.buttonPrimary : '#007AFF' }
+                  : { ...styles.startButtonDisabled, backgroundColor: isDarkMode ? DarkPokerColors.buttonDisabled : '#ccc' }
               ]}
               onPress={handleStartGame}
               disabled={!canStartGame}
@@ -233,7 +267,9 @@ export const CreateSessionScreen: React.FC<CreateSessionScreenProps> = ({
             >
               <Text style={[
                 styles.startButtonText,
-                canStartGame ? styles.startButtonTextEnabled : styles.startButtonTextDisabled
+                canStartGame 
+                  ? { ...styles.startButtonTextEnabled, color: isDarkMode ? DarkPokerColors.buttonText : '#fff' }
+                  : { ...styles.startButtonTextDisabled, color: isDarkMode ? DarkPokerColors.disabledText : '#999' }
               ]}>
                 {players.length < 4 
                   ? `Add ${4 - players.length} more players to start`
@@ -242,8 +278,8 @@ export const CreateSessionScreen: React.FC<CreateSessionScreenProps> = ({
               </Text>
             </TouchableOpacity>
 
-            <View style={styles.infoContainer}>
-              <Text style={styles.infoText}>
+            <View style={[styles.infoContainer, { backgroundColor: isDarkMode ? DarkPokerColors.surfaceBackground : '#f9f9f9' }]}>
+              <Text style={[styles.infoText, { color: isDarkMode ? DarkPokerColors.secondaryText : '#666' }]}>
                 • Add 4-8 players to participate
               </Text>
               <Text style={styles.infoText}>

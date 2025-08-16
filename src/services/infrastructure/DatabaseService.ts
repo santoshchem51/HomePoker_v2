@@ -1,6 +1,6 @@
 import SQLite, { SQLiteDatabase } from 'react-native-sqlite-storage';
 import { ServiceError } from '../core/ServiceError';
-import { v4 as uuidv4 } from 'uuid';
+import { generateUUID } from '../../utils/generateId';
 
 export interface QueryResult {
   rows: {
@@ -548,6 +548,10 @@ export class DatabaseService {
         version: 2,
         sql: this.getIndexOptimizationSql(),
       },
+      {
+        version: 3,
+        sql: this.getSessionExportsTableSql(),
+      },
     ];
   }
 
@@ -638,6 +642,19 @@ export class DatabaseService {
       CREATE INDEX IF NOT EXISTS idx_transactions_player ON transactions(player_id, timestamp);
       CREATE INDEX IF NOT EXISTS idx_transactions_type ON transactions(session_id, type);
       CREATE INDEX IF NOT EXISTS idx_transactions_active ON transactions(session_id, is_voided, timestamp);
+
+      CREATE TABLE IF NOT EXISTS session_exports (
+        id TEXT PRIMARY KEY,
+        session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+        export_format TEXT CHECK(export_format IN ('json', 'csv', 'whatsapp')) NOT NULL,
+        file_path TEXT NOT NULL,
+        file_size INTEGER NOT NULL,
+        checksum TEXT NOT NULL,
+        exported_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_exports_session ON session_exports(session_id);
+      CREATE INDEX IF NOT EXISTS idx_exports_date ON session_exports(exported_at);
     `;
   }
 
@@ -666,6 +683,24 @@ export class DatabaseService {
       CREATE INDEX IF NOT EXISTS idx_active_players_by_session ON players(session_id, status) WHERE status = 'active';
       CREATE INDEX IF NOT EXISTS idx_recent_transactions ON transactions(timestamp DESC, is_voided) WHERE is_voided = 0;
       CREATE INDEX IF NOT EXISTS idx_session_totals ON transactions(session_id, type, amount) WHERE is_voided = 0;
+    `;
+  }
+
+  private getSessionExportsTableSql(): string {
+    return `
+      -- Create session_exports table if it doesn't exist
+      CREATE TABLE IF NOT EXISTS session_exports (
+        id TEXT PRIMARY KEY,
+        session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+        export_format TEXT CHECK(export_format IN ('json', 'csv', 'whatsapp')) NOT NULL,
+        file_path TEXT NOT NULL,
+        file_size INTEGER NOT NULL,
+        checksum TEXT NOT NULL,
+        exported_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_exports_session ON session_exports(session_id);
+      CREATE INDEX IF NOT EXISTS idx_exports_date ON session_exports(exported_at);
     `;
   }
 
@@ -1425,7 +1460,7 @@ export class DatabaseService {
     
     try {
       // Create sample session
-      const sessionId = uuidv4();
+      const sessionId = generateUUID();
       await this.createSession({
         name: 'Development Test Session',
         organizerId: 'dev-organizer',
@@ -1453,7 +1488,7 @@ export class DatabaseService {
 
       // Add players to session
       for (let i = 0; i < 4; i++) {
-        const playerId = uuidv4();
+        const playerId = generateUUID();
         await this.addPlayer({
           sessionId,
           name: profiles[i].name,
@@ -1503,7 +1538,7 @@ export class DatabaseService {
 
   // Session CRUD Operations
   public async createSession(session: Omit<Session, 'id' | 'createdAt'>): Promise<Session> {
-    const id = uuidv4();
+    const id = generateUUID();
     const createdAt = new Date();
     
     await this.executeQuery(
@@ -1586,7 +1621,7 @@ export class DatabaseService {
 
   // Player CRUD Operations
   public async addPlayer(player: Omit<Player, 'id' | 'joinedAt'>): Promise<Player> {
-    const id = uuidv4();
+    const id = generateUUID();
     const joinedAt = new Date();
 
     await this.executeQuery(
@@ -1664,7 +1699,7 @@ export class DatabaseService {
 
   // Transaction CRUD Operations
   public async recordTransaction(transaction: Omit<Transaction, 'id' | 'timestamp'>): Promise<Transaction> {
-    const id = uuidv4();
+    const id = generateUUID();
     const timestamp = new Date();
 
     await this.executeQuery(
@@ -1718,7 +1753,7 @@ export class DatabaseService {
 
   // PlayerProfile CRUD Operations
   public async createProfile(profile: Omit<PlayerProfile, 'id' | 'createdAt'>): Promise<PlayerProfile> {
-    const id = uuidv4();
+    const id = generateUUID();
     const createdAt = new Date();
 
     await this.executeQuery(

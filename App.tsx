@@ -13,6 +13,7 @@ import { useMemoryManagement, useMemoryMonitoring } from './src/hooks/useMemoryM
 import { ThemeProvider, useTheme } from './src/contexts/ThemeContext';
 import { BrightnessOverlay } from './src/components/common/BrightnessControl';
 import { DarkPokerColors } from './src/styles/darkTheme.styles';
+import AppNavigator from './src/navigation/AppNavigator';
 
 // Performance monitoring for startup
 let startupStartTime = Date.now();
@@ -284,46 +285,8 @@ function ThemedAppContent() {
     );
   }
 
-  // Dynamic styles available if needed
-  // const dynamicStyles = getDynamicStyles(isDarkMode);
-
-  return (
-    <View style={[styles.container, { backgroundColor: isDarkMode ? DarkPokerColors.background : '#f5f5f5' }]}>
-      <StatusBar barStyle={isDarkMode ? 'light-content' : 'dark-content'} />
-      
-      <View style={[styles.workingContainer, { backgroundColor: isDarkMode ? DarkPokerColors.background : '#f5f5f5' }]}>
-        <Text style={[styles.workingTitle, { color: isDarkMode ? DarkPokerColors.goldChip : '#2196F3' }]}>
-          🎰 PokePot
-        </Text>
-        <Text style={[styles.workingSubtitle, { color: isDarkMode ? DarkPokerColors.success : '#4CAF50' }]}>
-          Epic 1 Complete ✅ | Epic 2 Dark Mode ✅
-        </Text>
-        
-        <TouchableOpacity style={[styles.workingButton, { 
-          backgroundColor: isDarkMode ? DarkPokerColors.buttonPrimary : '#2196F3' 
-        }]}>
-          <Text style={[styles.workingButtonText, { 
-            color: isDarkMode ? DarkPokerColors.background : '#fff' 
-          }]}>
-            Start New Session
-          </Text>
-        </TouchableOpacity>
-        
-        <Text style={[styles.workingStatus, { color: isDarkMode ? DarkPokerColors.secondaryText : '#666' }]}>
-          Dark mode & poker room optimization active!
-        </Text>
-        
-        {/* Theme indicator */}
-        <Text style={[styles.themeIndicator, { color: isDarkMode ? DarkPokerColors.selected : '#FFC107' }]}>
-          🌙 Theme: {isDarkMode ? 'Dark (Poker Optimized)' : 'Light'} | 
-          🔆 Brightness: {Math.round(brightness * 100)}%
-        </Text>
-      </View>
-      
-      {/* Brightness overlay for independent brightness control */}
-      <BrightnessOverlay brightness={brightness} />
-    </View>
-  );
+  // Now that we have navigation, show the main app
+  return <AppNavigator />;
 }
 
 // Main App component with ThemeProvider wrapper

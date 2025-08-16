@@ -113,11 +113,8 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
           newErrors.amount = `Amount cannot exceed $${TRANSACTION_LIMITS.MAX_CASH_OUT}`;
         }
         
-        // Check if cash-out exceeds player's current balance
-        const selectedPlayer = players.find(p => p.id === selectedPlayerId);
-        if (selectedPlayer && numAmount > selectedPlayer.currentBalance) {
-          newErrors.amount = `Amount cannot exceed player's balance $${selectedPlayer.currentBalance.toFixed(2)}`;
-        }
+        // Note: In poker, players can win chips during gameplay, so they can cash out
+        // more than their initial balance. We don't validate against currentBalance.
       }
     }
 
@@ -422,28 +419,28 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   form: {
-    padding: 20,
+    padding: 12,
     backgroundColor: '#FFFFFF',
     borderRadius: 8,
-    margin: 16,
+    margin: 8,
     shadowColor: '#000',
     shadowOffset: {
       width: 0,
-      height: 2,
+      height: 1,
     },
     shadowOpacity: 0.1,
-    shadowRadius: 3.84,
-    elevation: 5,
+    shadowRadius: 2,
+    elevation: 3,
   },
   title: {
-    fontSize: 24,
+    fontSize: 18,
     fontWeight: 'bold',
     textAlign: 'center',
-    marginBottom: 24,
+    marginBottom: 16,
     color: '#2C3E50',
   },
   fieldContainer: {
-    marginBottom: 20,
+    marginBottom: 12,
   },
   label: {
     fontSize: 16,

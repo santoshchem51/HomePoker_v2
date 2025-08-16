@@ -11,7 +11,7 @@
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { v4 as uuidv4 } from 'uuid';
+import { generateUUID } from '../../utils/generateId';
 import { 
   PlayerProfile, 
   ProfileData, 
@@ -62,7 +62,7 @@ export class ProfileService {
       // Create new profile
       const now = new Date();
       const profile: PlayerProfile = {
-        id: uuidv4(),
+        id: generateUUID(),
         name: request.name.trim(),
         preferredBuyIn: request.preferredBuyIn,
         createdAt: now,

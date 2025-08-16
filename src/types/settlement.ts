@@ -18,6 +18,7 @@ export interface EarlyCashOutResult {
   playerName: string;
   currentChips: number;
   totalBuyIns: number;
+  totalCashOuts: number;
   netPosition: number;
   settlementAmount: number;
   owesOrOwed: 'owed' | 'owes';
@@ -53,6 +54,7 @@ export interface PlayerSettlement {
   playerName: string;
   currentChips: number;
   totalBuyIns: number;
+  totalCashOuts: number;
   netAmount: number;
   owesOrOwed: 'owed' | 'owes';
 }

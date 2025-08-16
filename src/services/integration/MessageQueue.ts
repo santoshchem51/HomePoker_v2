@@ -9,7 +9,7 @@ import {
   MAX_RETRY_ATTEMPTS
 } from '../../types/whatsapp';
 import { WhatsAppService } from './WhatsAppService';
-import { v4 as uuidv4 } from 'uuid';
+import { generateUUID } from '../../utils/generateId';
 
 export class MessageQueue {
   private static instance: MessageQueue | null = null;
@@ -70,7 +70,7 @@ export class MessageQueue {
   public async queueMessage(message: string): Promise<string> {
     try {
       const queueItem: MessageQueueItem = {
-        id: uuidv4(),
+        id: generateUUID(),
         message,
         retryCount: 0,
         createdAt: new Date()

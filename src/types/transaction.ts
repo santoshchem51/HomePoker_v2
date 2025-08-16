@@ -7,7 +7,7 @@ export interface Transaction {
   id: string;
   sessionId: string;
   playerId: string;
-  type: 'buy_in' | 'cash_out';
+  type: 'buy_in' | 'cash_out' | 'chip_adjustment';
   amount: number;
   timestamp: Date;
   method: 'voice' | 'manual';

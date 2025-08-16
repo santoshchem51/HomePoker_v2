@@ -115,14 +115,11 @@ android {
             keyPassword 'android'
         }
         release {
-            // Production signing config - values should be set via environment variables
-            // or gradle.properties for security
-            if (project.hasProperty('POKEPOT_RELEASE_STORE_FILE')) {
-                storeFile file(POKEPOT_RELEASE_STORE_FILE)
-                storePassword POKEPOT_RELEASE_STORE_PASSWORD
-                keyAlias POKEPOT_RELEASE_KEY_ALIAS
-                keyPassword POKEPOT_RELEASE_KEY_PASSWORD
-            }
+            // Production signing config
+            storeFile file('pokepot-release-key.keystore')
+            storePassword 'pokepot2024'
+            keyAlias 'pokepot-key-alias'
+            keyPassword 'pokepot2024'
         }
     }
     buildTypes {
@@ -134,22 +131,22 @@ android {
         release {
             // Production release configuration
             signingConfig signingConfigs.release
-            minifyEnabled enableProguardInReleaseBuilds
-            shrinkResources true
+            minifyEnabled false
+            shrinkResources false
             proguardFiles getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro"
             
             // Bundle optimization
             zipAlignEnabled true
             
-            // APK splitting for smaller download size
-            splits {
-                abi {
-                    reset()
-                    enable true
-                    universalApk false
-                    include "arm64-v8a", "armeabi-v7a", "x86", "x86_64"
-                }
-            }
+            // APK splitting disabled for debugging
+            // splits {
+            //     abi {
+            //         reset()
+            //         enable true
+            //         universalApk true
+            //         include "arm64-v8a", "armeabi-v7a", "x86", "x86_64"
+            //     }
+            // }
         }
     }
 }

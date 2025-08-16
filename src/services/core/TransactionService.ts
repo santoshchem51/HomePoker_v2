@@ -123,7 +123,8 @@ export class TransactionService {
         throw new ServiceError('PLAYER_NOT_FOUND', `Player ${playerId} not found`);
       }
 
-      const willCashOutCompletely = CalculationUtils.subtractAmounts(player.currentBalance, amount) <= 0;
+      // In poker, any cash-out typically means the player is leaving the game completely
+      const willCashOutCompletely = true;
 
       // Execute cash-out transaction with ACID compliance
       return await this.dbService.executeTransaction(async () => {
@@ -513,10 +514,10 @@ export class TransactionService {
       throw new ServiceError('VALIDATION_ERROR', `Buy-in amount cannot exceed $${TRANSACTION_LIMITS.MAX_BUY_IN}`);
     }
 
-    // Session validation
+    // Session validation - Allow buy-ins during creation (initial buy-ins) and active gameplay
     const session = await this.sessionService.getSession(sessionId);
-    if (!session || session.status !== 'active') {
-      throw new ServiceError('VALIDATION_ERROR', 'Buy-ins are only allowed for active sessions');
+    if (!session || (session.status !== 'active' && session.status !== 'created')) {
+      throw new ServiceError('VALIDATION_ERROR', 'Buy-ins are only allowed for created or active sessions');
     }
 
     // Player validation
@@ -555,10 +556,10 @@ export class TransactionService {
       throw new ServiceError('VALIDATION_ERROR', `Cash-out amount cannot exceed $${TRANSACTION_LIMITS.MAX_CASH_OUT}`);
     }
 
-    // Session validation
+    // Session validation - Allow cash-outs during creation and active gameplay
     const session = await this.sessionService.getSession(sessionId);
-    if (!session || session.status !== 'active') {
-      throw new ServiceError('VALIDATION_ERROR', 'Cash-outs are only allowed for active sessions');
+    if (!session || (session.status !== 'active' && session.status !== 'created')) {
+      throw new ServiceError('VALIDATION_ERROR', 'Cash-outs are only allowed for created or active sessions');
     }
 
     // Player validation
@@ -577,10 +578,9 @@ export class TransactionService {
       throw new ServiceError('VALIDATION_ERROR', 'Cash-outs are only allowed for active players');
     }
 
-    // Validate sufficient balance
-    if (amount > player.currentBalance) {
-      throw new ServiceError('INSUFFICIENT_BALANCE', 'Cash-out amount exceeds current balance');
-    }
+    // Note: In poker, players can win/lose chips during gameplay, so their actual
+    // chip count may differ from currentBalance. We allow cash-outs of any amount
+    // since the settlement logic will handle the final accounting.
   }
 
   /**

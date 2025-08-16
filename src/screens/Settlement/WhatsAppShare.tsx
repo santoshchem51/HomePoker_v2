@@ -19,6 +19,8 @@ import { WhatsAppService } from '../../services/integration/WhatsAppService';
 import { SettlementService } from '../../services/settlement/SettlementService';
 import { OptimizedSettlement } from '../../types/settlement';
 import { ShareResult } from '../../types/whatsapp';
+import { useTheme } from '../../contexts/ThemeContext';
+import { DarkPokerColors } from '../../styles/darkTheme.styles';
 
 // Constants to avoid recreation on every render
 const SHARE_BUTTON_TEXT = '📱 Share to WhatsApp';
@@ -45,6 +47,7 @@ export const WhatsAppShare: React.FC<WhatsAppShareProps> = ({
   const [isSharing, setIsSharing] = useState(false);
   const [previewMessage, setPreviewMessage] = useState<string>('');
   const [showPreview, setShowPreview] = useState(false);
+  const { isDarkMode } = useTheme();
 
   const whatsappService = WhatsAppService.getInstance();
   const settlementService = SettlementService.getInstance();
@@ -196,71 +199,90 @@ export const WhatsAppShare: React.FC<WhatsAppShareProps> = ({
   }, [previewMessage, sessionName, onShareComplete, handleShowPreview]);
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Share Results</Text>
+    <View style={[styles.container, { backgroundColor: isDarkMode ? DarkPokerColors.cardBackground : '#fff' }]}>
+      <Text style={[styles.title, { color: isDarkMode ? DarkPokerColors.primaryText : '#333' }]}>Share Results</Text>
       
       {/* Primary WhatsApp Share Button (AC: 1) */}
       <TouchableOpacity
-        style={[styles.primaryButton, isSharing && styles.disabled]}
+        style={[
+          styles.primaryButton, 
+          { backgroundColor: isDarkMode ? DarkPokerColors.buttonPrimary : '#25D366' },
+          isSharing && styles.disabled
+        ]}
         onPress={handleWhatsAppShare}
         disabled={isSharing}
       >
-        <Text style={styles.primaryButtonText}>
+        <Text style={[styles.primaryButtonText, { color: isDarkMode ? DarkPokerColors.buttonText : '#fff' }]}>
           {SHARE_BUTTON_TEXT}
         </Text>
       </TouchableOpacity>
 
       {/* Preview Button */}
       <TouchableOpacity
-        style={styles.secondaryButton}
+        style={[styles.secondaryButton, { backgroundColor: isDarkMode ? DarkPokerColors.buttonSecondary : '#f0f0f0' }]}
         onPress={handleShowPreview}
       >
-        <Text style={styles.secondaryButtonText}>
+        <Text style={[styles.secondaryButtonText, { color: isDarkMode ? DarkPokerColors.primaryText : '#333' }]}>
           👀 Preview Message
         </Text>
       </TouchableOpacity>
 
       {/* Message Preview (AC: 6) */}
       {showPreview && previewMessage && (
-        <View style={styles.previewContainer}>
-          <Text style={styles.previewTitle}>Message Preview:</Text>
-          <ScrollView style={styles.previewScroll}>
-            <Text style={styles.previewText}>{previewMessage}</Text>
+        <View style={[styles.previewContainer, { 
+          backgroundColor: isDarkMode ? DarkPokerColors.surfaceBackground : '#f9f9f9',
+          borderColor: isDarkMode ? DarkPokerColors.border : '#ddd'
+        }]}>
+          <Text style={[styles.previewTitle, { color: isDarkMode ? DarkPokerColors.primaryText : '#333' }]}>Message Preview:</Text>
+          <ScrollView style={[styles.previewScroll, { backgroundColor: isDarkMode ? DarkPokerColors.background : '#fff' }]}>
+            <Text style={[styles.previewText, { color: isDarkMode ? DarkPokerColors.primaryText : '#333' }]}>{previewMessage}</Text>
           </ScrollView>
         </View>
       )}
 
       {/* Alternative Sharing Options (AC: 7) */}
       <View style={styles.alternativeContainer}>
-        <Text style={styles.alternativeTitle}>Alternative Sharing:</Text>
+        <Text style={[styles.alternativeTitle, { color: isDarkMode ? DarkPokerColors.secondaryText : '#666' }]}>Alternative Sharing:</Text>
         
         <View style={styles.alternativeButtons}>
           <TouchableOpacity
-            style={styles.alternativeButton}
+            style={[styles.alternativeButton, { 
+              backgroundColor: isDarkMode ? DarkPokerColors.buttonSecondary : '#f8f9fa',
+              borderColor: isDarkMode ? DarkPokerColors.border : '#dee2e6'
+            }]}
             onPress={handleCopyToClipboard}
           >
-            <Text style={styles.alternativeButtonText}>📋 Copy</Text>
+            <Text style={[styles.alternativeButtonText, { color: isDarkMode ? DarkPokerColors.primaryText : '#333' }]}>📋 Copy</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={styles.alternativeButton}
+            style={[styles.alternativeButton, { 
+              backgroundColor: isDarkMode ? DarkPokerColors.buttonSecondary : '#f8f9fa',
+              borderColor: isDarkMode ? DarkPokerColors.border : '#dee2e6'
+            }]}
             onPress={handleNativeShare}
           >
-            <Text style={styles.alternativeButtonText}>📤 Share</Text>
+            <Text style={[styles.alternativeButtonText, { color: isDarkMode ? DarkPokerColors.primaryText : '#333' }]}>📤 Share</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={styles.alternativeButton}
+            style={[styles.alternativeButton, { 
+              backgroundColor: isDarkMode ? DarkPokerColors.buttonSecondary : '#f8f9fa',
+              borderColor: isDarkMode ? DarkPokerColors.border : '#dee2e6'
+            }]}
             onPress={handleSMSShare}
           >
-            <Text style={styles.alternativeButtonText}>💬 SMS</Text>
+            <Text style={[styles.alternativeButtonText, { color: isDarkMode ? DarkPokerColors.primaryText : '#333' }]}>💬 SMS</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={styles.alternativeButton}
+            style={[styles.alternativeButton, { 
+              backgroundColor: isDarkMode ? DarkPokerColors.buttonSecondary : '#f8f9fa',
+              borderColor: isDarkMode ? DarkPokerColors.border : '#dee2e6'
+            }]}
             onPress={handleEmailShare}
           >
-            <Text style={styles.alternativeButtonText}>📧 Email</Text>
+            <Text style={[styles.alternativeButtonText, { color: isDarkMode ? DarkPokerColors.primaryText : '#333' }]}>📧 Email</Text>
           </TouchableOpacity>
         </View>
       </View>

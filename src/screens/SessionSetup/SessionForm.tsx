@@ -36,14 +36,22 @@ export const SessionForm: React.FC<SessionFormProps> = ({ onSubmit, loading }) =
     const trimmedSessionName = sessionName.trim();
     if (!trimmedSessionName) {
       newErrors.sessionName = 'Session name is required';
+    } else if (trimmedSessionName.length < 3) {
+      newErrors.sessionName = 'Session name must be at least 3 characters';
     } else if (trimmedSessionName.length > 50) {
       newErrors.sessionName = 'Session name must be 50 characters or less';
+    } else if (/^test|^session\d+|^game\d+/i.test(trimmedSessionName)) {
+      newErrors.sessionName = 'Please enter a meaningful session name (avoid test names)';
     }
 
     // Validate organizer ID
     const trimmedOrganizerId = organizerId.trim();
     if (!trimmedOrganizerId) {
       newErrors.organizerId = 'Organizer name is required';
+    } else if (trimmedOrganizerId.length < 2) {
+      newErrors.organizerId = 'Organizer name must be at least 2 characters';
+    } else if (/^test|^user\d+|^admin/i.test(trimmedOrganizerId)) {
+      newErrors.organizerId = 'Please enter a real organizer name (avoid test names)';
     }
 
     setErrors(newErrors);

@@ -16,21 +16,24 @@ import {
   TouchableOpacity,
   Alert,
 } from 'react-native';
+import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
+import { StackNavigationProp } from '@react-navigation/stack';
+import { RootStackParamList } from '../../navigation/AppNavigator';
 import { TransactionForm } from './TransactionForm';
 import { useSessionStore } from '../../stores/sessionStore';
 import { useMemoryManagement } from '../../hooks/useMemoryManagement';
+import { useTheme } from '../../contexts/ThemeContext';
+import { DarkPokerColors } from '../../styles/darkTheme.styles';
 
-interface LiveGameScreenProps {
-  sessionId: string;
-  onEndSession?: () => void;
-  onNavigateToHistory?: () => void;
-}
+type LiveGameScreenNavigationProp = StackNavigationProp<RootStackParamList, 'LiveGame'>;
+type LiveGameScreenRouteProp = RouteProp<RootStackParamList, 'LiveGame'>;
 
-const LiveGameScreenComponent: React.FC<LiveGameScreenProps> = ({
-  sessionId,
-  onEndSession,
-  onNavigateToHistory,
-}) => {
+const LiveGameScreenComponent: React.FC = () => {
+  const navigation = useNavigation<LiveGameScreenNavigationProp>();
+  const route = useRoute<LiveGameScreenRouteProp>();
+  const { sessionId, sessionName } = route.params;
+  const { isDarkMode } = useTheme();
+  
   // Memory management
   const { addCleanup, trackTimer } = useMemoryManagement({
     componentName: 'LiveGameScreen',
@@ -47,7 +50,7 @@ const LiveGameScreenComponent: React.FC<LiveGameScreenProps> = ({
     players,
     error: sessionError,
     loading: sessionLoading,
-    actions: { loadSessionState, recordBuyIn },
+    actions: { loadSessionState, recordBuyIn, recordCashOut },
   } = useSessionStore();
 
   // Load session data on mount
@@ -73,22 +76,54 @@ const LiveGameScreenComponent: React.FC<LiveGameScreenProps> = ({
   const handleCashOut = useCallback(async (playerId: string, amount: number, organizerConfirmed?: boolean): Promise<void> => {
     setTransactionLoading(true);
     try {
-      // TODO: Implement cash-out via TransactionService directly since it's not available in sessionStore yet
-      console.log('Cash-out transaction:', { sessionId, playerId, amount, organizerConfirmed });
-      
-      // Use tracked timer for async operations
-      trackTimer(setTimeout(() => {
-        setTransactionLoading(false);
-      }, 500));
-      
-      await new Promise<void>(resolve => setTimeout(() => resolve(), 500));
+      await recordCashOut(sessionId, playerId, amount, organizerConfirmed);
     } catch (error) {
       Alert.alert('Transaction Error', 'Failed to record cash-out. Please try again.');
       throw error;
     } finally {
       setTransactionLoading(false);
     }
-  }, [sessionId, trackTimer]);
+  }, [sessionId, recordCashOut]);
+
+  const handleEndSession = useCallback(async () => {
+    try {
+      // Check if any players are still active (haven't cashed out completely)
+      const activePlayers = players.filter(player => player.status === 'active');
+      
+      if (activePlayers.length > 0) {
+        const playerNames = activePlayers.map(p => p.name).join(', ');
+        Alert.alert(
+          'Players Still Active',
+          `${playerNames} haven't cashed out yet. Please record their cash-outs before ending the session.`,
+          [
+            { text: 'OK', style: 'default' }
+          ]
+        );
+        return;
+      }
+
+      // If no players have chips, proceed with normal end session confirmation
+      Alert.alert(
+        'End Session',
+        'Are you sure you want to end this poker session?',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { 
+            text: 'End Session', 
+            style: 'destructive', 
+            onPress: () => navigation.navigate('Settlement', { 
+              sessionId, 
+              sessionName,
+              isSessionEnd: true
+            })
+          },
+        ]
+      );
+    } catch (error) {
+      console.error('Error checking session end state:', error);
+      Alert.alert('Error', 'Failed to check session state. Please try again.');
+    }
+  }, [players, sessionId, sessionName, navigation]);
 
   // Setup cleanup for component state
   useEffect(() => {
@@ -124,36 +159,42 @@ const LiveGameScreenComponent: React.FC<LiveGameScreenProps> = ({
   }
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: isDarkMode ? DarkPokerColors.background : '#F5F5F5' }]}>
       {/* Header - Basic session info only */}
-      <View style={styles.header}>
-        <Text style={styles.sessionName}>{currentSession.name}</Text>
-        <Text style={styles.sessionStatus}>Live Game • {players.length} Players</Text>
+      <View style={[styles.header, { backgroundColor: isDarkMode ? DarkPokerColors.cardBackground : '#FFFFFF' }]}>
+        <Text style={[styles.sessionName, { color: isDarkMode ? DarkPokerColors.primaryText : '#333' }]}>{currentSession.name}</Text>
+        <Text style={[styles.sessionStatus, { color: isDarkMode ? DarkPokerColors.secondaryText : '#666' }]}>Live Game • {players.length} Players</Text>
       </View>
 
-      <ScrollView style={styles.content}>
+      <ScrollView 
+        style={styles.scrollContainer}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={true}
+      >
         {/* Player List - Basic display with running balances */}
-        <View style={styles.playersSection}>
-          <Text style={styles.sectionTitle}>Players</Text>
+        <View style={[styles.playersSection, { backgroundColor: isDarkMode ? DarkPokerColors.cardBackground : '#FFFFFF' }]}>
+          <Text style={[styles.sectionTitle, { color: isDarkMode ? DarkPokerColors.primaryText : '#333' }]}>Players</Text>
           
           {players.length > 0 ? (
             players.map((player) => (
-              <View key={player.id} style={styles.playerCard}>
+              <View key={player.id} style={[styles.playerCard, { backgroundColor: isDarkMode ? DarkPokerColors.surfaceBackground : '#F8F9FA' }]}>
                 <View style={styles.playerInfo}>
-                  <Text style={styles.playerName}>{player.name}</Text>
-                  <Text style={styles.playerBalance}>
-                    Balance: ${(player.currentBalance || 0).toFixed(2)}
-                  </Text>
-                  <Text style={styles.playerBuyIns}>
-                    Buy-ins: ${(player.totalBuyIns || 0).toFixed(2)}
-                  </Text>
+                  <Text style={[styles.playerName, { color: isDarkMode ? DarkPokerColors.primaryText : '#333' }]}>{player.name}</Text>
+                  <View style={styles.playerFinancials}>
+                    <Text style={[styles.playerBalance, { color: isDarkMode ? DarkPokerColors.secondaryText : '#1976D2' }]}>
+                      ${(player.currentBalance || 0).toFixed(2)}
+                    </Text>
+                    <Text style={[styles.playerBuyIns, { color: isDarkMode ? DarkPokerColors.secondaryText : '#666' }]}>
+                      (${(player.totalBuyIns || 0).toFixed(2)} in)
+                    </Text>
+                  </View>
                 </View>
                 <View style={styles.playerStatus}>
                   <Text style={[
                     styles.statusText, 
                     player.status === 'active' ? styles.statusActive : styles.statusCashedOut
                   ]}>
-                    {player.status === 'active' ? 'Active' : 'Cashed Out'}
+                    {player.status === 'active' ? '●' : '○'}
                   </Text>
                 </View>
               </View>
@@ -174,32 +215,19 @@ const LiveGameScreenComponent: React.FC<LiveGameScreenProps> = ({
 
         {/* Action Buttons - Basic session management */}
         <View style={styles.actionButtons}>
-          {onNavigateToHistory && (
-            <TouchableOpacity
-              style={[styles.actionButton, styles.historyButton]}
-              onPress={onNavigateToHistory}
-            >
-              <Text style={styles.actionButtonText}>View History</Text>
-            </TouchableOpacity>
-          )}
+          <TouchableOpacity
+            style={[styles.actionButton, styles.historyButton]}
+            onPress={() => navigation.navigate('SessionHistory')}
+          >
+            <Text style={styles.actionButtonText}>View History</Text>
+          </TouchableOpacity>
           
-          {onEndSession && (
-            <TouchableOpacity
-              style={[styles.actionButton, styles.endSessionButton]}
-              onPress={() => {
-                Alert.alert(
-                  'End Session',
-                  'Are you sure you want to end this poker session?',
-                  [
-                    { text: 'Cancel', style: 'cancel' },
-                    { text: 'End Session', style: 'destructive', onPress: onEndSession },
-                  ]
-                );
-              }}
-            >
-              <Text style={styles.actionButtonText}>End Session</Text>
-            </TouchableOpacity>
-          )}
+          <TouchableOpacity
+            style={[styles.actionButton, styles.endSessionButton]}
+            onPress={handleEndSession}
+          >
+            <Text style={styles.actionButtonText}>End Session</Text>
+          </TouchableOpacity>
         </View>
       </ScrollView>
     </View>
@@ -232,13 +260,19 @@ const styles = StyleSheet.create({
     color: '#666',
   },
   
-  content: {
+  scrollContainer: {
     flex: 1,
+  },
+  
+  scrollContent: {
     padding: 16,
+    paddingBottom: 100, // Extra space for bottom content
   },
   
   playersSection: {
-    marginBottom: 24,
+    marginBottom: 16,
+    padding: 12,
+    borderRadius: 8,
   },
   
   sectionTitle: {
@@ -250,56 +284,60 @@ const styles = StyleSheet.create({
   
   playerCard: {
     backgroundColor: '#FFFFFF',
-    padding: 12,
-    marginBottom: 8,
-    borderRadius: 8,
+    padding: 8,
+    marginBottom: 4,
+    borderRadius: 6,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    minHeight: 50, // Reduced height for more players
   },
   
   playerInfo: {
     flex: 1,
   },
   
-  playerName: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#333',
-    marginBottom: 4,
+  playerFinancials: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
   
-  playerBalance: {
-    fontSize: 14,
-    color: '#1976D2',
+  playerName: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#333',
     marginBottom: 2,
   },
   
+  playerBalance: {
+    fontSize: 13,
+    color: '#1976D2',
+    marginBottom: 1,
+  },
+  
   playerBuyIns: {
-    fontSize: 12,
+    fontSize: 11,
     color: '#666',
   },
   
   playerStatus: {
-    marginLeft: 16,
+    marginLeft: 8,
+    minWidth: 20,
+    alignItems: 'center',
   },
   
   statusText: {
-    fontSize: 12,
-    fontWeight: '600',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 4,
+    fontSize: 16,
+    fontWeight: 'bold',
   },
   
   statusActive: {
-    backgroundColor: '#E8F5E8',
-    color: '#2E7D32',
+    color: '#2E7D32', // Green for active
   },
   
   statusCashedOut: {
-    backgroundColor: '#FFF3E0',
-    color: '#F57C00',
+    color: '#999', // Gray for cashed out
   },
   
   noPlayersText: {

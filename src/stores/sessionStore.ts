@@ -20,6 +20,10 @@ interface SessionStoreState {
   loading: boolean;
   error: string | null;
 
+  // Active sessions data (for navigation)
+  activeSessions: Session[];
+  activeSessionsLoading: boolean;
+
   // Transaction data - Story 1.3
   transactions: TransactionSummary[];
   playerBalances: { [playerId: string]: PlayerBalance };
@@ -44,8 +48,12 @@ interface SessionStoreState {
     clearSession: () => void;
     clearError: () => void;
     
+    // Active sessions management
+    loadActiveSessions: () => Promise<void>;
+    
     // Transaction actions - Story 1.3
     recordBuyIn: (sessionId: string, playerId: string, amount: number) => Promise<void>;
+    recordCashOut: (sessionId: string, playerId: string, amount: number, organizerConfirmed?: boolean) => Promise<void>;
     undoTransaction: (transactionId: string) => Promise<void>;
     loadTransactionHistory: (sessionId: string) => Promise<void>;
     refreshPlayerBalances: (sessionId: string) => Promise<void>;
@@ -71,6 +79,10 @@ export const useSessionStore = create<SessionStoreState>()(
       players: [],
       loading: false,
       error: null,
+      
+      // Active sessions state
+      activeSessions: [],
+      activeSessionsLoading: false,
       
       // Transaction state - Story 1.3
       transactions: [],
@@ -290,6 +302,27 @@ export const useSessionStore = create<SessionStoreState>()(
         },
 
         /**
+         * Load active sessions for navigation
+         */
+        loadActiveSessions: async () => {
+          set({ activeSessionsLoading: true });
+          
+          try {
+            const activeSessions = await sessionService.getActiveSessions();
+            set({ 
+              activeSessions,
+              activeSessionsLoading: false 
+            });
+          } catch (error) {
+            console.error('Failed to load active sessions:', error);
+            set({ 
+              activeSessions: [],
+              activeSessionsLoading: false 
+            });
+          }
+        },
+
+        /**
          * Get current player count
          */
         getPlayerCount: () => {
@@ -428,6 +461,130 @@ export const useSessionStore = create<SessionStoreState>()(
                     players: rollbackPlayers,
                     optimisticUpdates: updatedOptimisticUpdates,
                     error: error instanceof ServiceError ? error.message : 'Failed to record buy-in'
+                  };
+                });
+              }
+            }
+          );
+        },
+
+        /**
+         * Record a cash-out transaction with optimistic updates
+         * AC: 1, 4 - Cash-out transaction recording
+         */
+        recordCashOut: async (sessionId: string, playerId: string, amount: number, organizerConfirmed?: boolean) => {
+          const operationId = `recordCashOut_${playerId}_${Date.now()}`;
+          
+          // Apply optimistic update immediately for UI responsiveness
+          const optimisticTransactionId = `temp_cashout_${Date.now()}`;
+          const playerName = get().players.find(p => p.id === playerId)?.name || 'Unknown';
+          
+          set((state) => {
+            // Create optimistic transaction
+            const optimisticTransaction = {
+              id: optimisticTransactionId,
+              playerId,
+              playerName,
+              type: 'cash_out' as const,
+              amount,
+              timestamp: new Date(),
+              method: 'manual' as const,
+              isVoided: false
+            };
+
+            // Apply optimistic updates
+            const newTransactions = [optimisticTransaction, ...state.transactions];
+            const updatedSession = state.currentSession ? {
+              ...state.currentSession,
+              totalPot: state.currentSession.totalPot - amount
+            } : null;
+            const updatedPlayers = state.players.map(player => 
+              player.id === playerId 
+                ? {
+                    ...player,
+                    currentBalance: player.currentBalance - amount,
+                    totalCashOuts: player.totalCashOuts + amount,
+                    status: 'cashed_out' as const // Mark as cashed out
+                  }
+                : player
+            );
+
+            return {
+              ...state,
+              transactions: newTransactions,
+              currentSession: updatedSession,
+              players: updatedPlayers,
+              operationLoading: { ...state.operationLoading, [operationId]: true },
+              optimisticUpdates: { ...state.optimisticUpdates, [optimisticTransactionId]: true }
+            };
+          });
+
+          // Perform actual database operation responsively
+          return responsiveAsync(
+            () => transactionService.recordCashOut(sessionId, playerId, amount, 'manual', 'user', undefined, organizerConfirmed),
+            {
+              operationName: 'record_cash_out',
+              loadingCallback: (loading) => {
+                set((state) => ({
+                  ...state,
+                  operationLoading: { ...state.operationLoading, [operationId]: loading }
+                }));
+              },
+              successCallback: (transaction) => {
+                // Replace optimistic transaction with real one
+                set((state) => {
+                  const filteredTransactions = state.transactions.filter(t => t.id !== optimisticTransactionId);
+                  const realTransaction = {
+                    id: transaction.id,
+                    playerId: transaction.playerId,
+                    playerName,
+                    type: 'cash_out' as const,
+                    amount: transaction.amount,
+                    timestamp: transaction.timestamp,
+                    method: transaction.method,
+                    isVoided: transaction.isVoided
+                  };
+
+                  const updatedOptimisticUpdates = { ...state.optimisticUpdates };
+                  delete updatedOptimisticUpdates[optimisticTransactionId];
+
+                  return {
+                    ...state,
+                    transactions: [realTransaction, ...filteredTransactions],
+                    mostRecentTransaction: transaction,
+                    optimisticUpdates: updatedOptimisticUpdates
+                  };
+                });
+              },
+              errorCallback: (error) => {
+                // Rollback optimistic updates
+                set((state) => {
+                  const rollbackTransactions = state.transactions.filter(t => t.id !== optimisticTransactionId);
+                  const updatedSession = state.currentSession ? {
+                    ...state.currentSession,
+                    totalPot: state.currentSession.totalPot + amount
+                  } : null;
+                  const rollbackPlayers = state.players.map(player => 
+                    player.id === playerId 
+                      ? {
+                          ...player,
+                          currentBalance: player.currentBalance + amount,
+                          totalCashOuts: player.totalCashOuts - amount,
+                          status: 'active' as const // Restore active status
+                        }
+                      : player
+                  );
+
+                  const updatedOptimisticUpdates = { ...state.optimisticUpdates };
+                  delete updatedOptimisticUpdates[optimisticTransactionId];
+
+                  return {
+                    ...state,
+                    transactions: rollbackTransactions,
+                    currentSession: updatedSession,
+                    players: rollbackPlayers,
+                    optimisticUpdates: updatedOptimisticUpdates,
+                    error: error instanceof ServiceError ? error.message : 'Failed to record cash-out'
                   };
                 });
               }

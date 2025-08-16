@@ -293,13 +293,29 @@ export class WhatsAppService {
       .filter(t => t.type === 'cash_out')
       .reduce((sum, t) => CalculationUtils.addAmounts(sum, t.amount), 0);
 
-    const netPosition = CalculationUtils.subtractAmounts(totalCashOuts, totalBuyIns);
+    // For settlement preview: use current chips as projected cash-out if no actual cash-out
+    const projectedCashOut = totalCashOuts > 0 ? totalCashOuts : player.currentBalance;
+    const netPosition = CalculationUtils.subtractAmounts(projectedCashOut, totalBuyIns);
+
+    // Debug logging for settlement calculation
+    console.log(`Settlement Debug - ${player.name}:`, {
+      playerId: player.id,
+      playerTransactions: playerTransactions.length,
+      buyInTransactions: playerTransactions.filter(t => t.type === 'buy_in').length,
+      cashOutTransactions: playerTransactions.filter(t => t.type === 'cash_out').length,
+      totalBuyIns,
+      totalCashOuts,
+      projectedCashOut,
+      netPosition,
+      playerCurrentBalance: player.currentBalance,
+      calculation: `${projectedCashOut} (projected) - ${totalBuyIns} buy-ins = ${netPosition}`
+    });
 
     return {
       playerId: player.id,
       playerName: player.name,
       totalBuyIns,
-      totalCashOuts,
+      totalCashOuts: projectedCashOut, // Use projected for settlement display
       netPosition
     };
   }
@@ -421,8 +437,8 @@ export class WhatsAppService {
     message += '👥 Player Summary:\n';
     data.playerSummaries.forEach(player => {
       const sign = player.netPosition >= 0 ? '+' : '';
-      message += `• ${player.playerName}: $${player.totalBuyIns.toFixed(0)} in → `;
-      message += `$${player.totalCashOuts.toFixed(0)} out = ${sign}$${player.netPosition.toFixed(0)}\n`;
+      message += `• ${player.playerName}: $${player.totalBuyIns.toFixed(2)} in → `;
+      message += `$${player.totalCashOuts.toFixed(2)} out = ${sign}$${player.netPosition.toFixed(2)}\n`;
     });
 
     message += '\n';

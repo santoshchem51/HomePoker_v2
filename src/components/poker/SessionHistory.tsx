@@ -133,8 +133,18 @@ export const SessionHistory: React.FC<SessionHistoryProps> = ({
     });
   };
 
-  const formatCurrency = (amount: number) => {
-    return `$${amount.toFixed(2)}`;
+  const formatCurrency = (amount: number | undefined | null) => {
+    // Handle all falsy values and non-numbers
+    if (amount === undefined || amount === null || isNaN(amount) || typeof amount !== 'number') {
+      return '$0.00';
+    }
+    // Ensure the number is valid before calling toFixed
+    try {
+      return `$${Number(amount).toFixed(2)}`;
+    } catch (error) {
+      console.warn('Error formatting currency:', amount, error);
+      return '$0.00';
+    }
   };
 
   const getTimeUntilCleanup = (cleanupAt: string | null | undefined) => {
