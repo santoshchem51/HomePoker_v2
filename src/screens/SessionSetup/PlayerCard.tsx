@@ -2,15 +2,15 @@
  * PlayerCard - Individual player display card with remove functionality
  * Displays player information with accessible touch targets
  */
-import React from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
   TouchableOpacity,
   StyleSheet,
-  Alert
 } from 'react-native';
 import { Player } from '../../types/player';
+import { ConfirmationDialog } from '../../components/common/ConfirmationDialog';
 
 export interface PlayerCardProps {
   player: Player;
@@ -23,24 +23,23 @@ export const PlayerCard: React.FC<PlayerCardProps> = ({
   onRemove,
   canRemove
 }) => {
+  const [showConfirmation, setShowConfirmation] = useState(false);
   
   /**
    * Handle remove button press with confirmation
    * AC: 3
    */
   const handleRemovePress = () => {
-    Alert.alert(
-      'Remove Player',
-      `Remove ${player.name} from the session?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { 
-          text: 'Remove', 
-          style: 'destructive',
-          onPress: onRemove 
-        }
-      ]
-    );
+    setShowConfirmation(true);
+  };
+
+  const handleConfirmRemove = () => {
+    setShowConfirmation(false);
+    onRemove();
+  };
+
+  const handleCancelRemove = () => {
+    setShowConfirmation(false);
   };
 
   /**
@@ -95,6 +94,17 @@ export const PlayerCard: React.FC<PlayerCardProps> = ({
           <Text style={styles.removeButtonText}>×</Text>
         </TouchableOpacity>
       )}
+      
+      <ConfirmationDialog
+        visible={showConfirmation}
+        title="Remove Player"
+        message={`Remove ${player.name} from the session?`}
+        confirmText="Remove"
+        cancelText="Cancel"
+        confirmStyle="destructive"
+        onConfirm={handleConfirmRemove}
+        onCancel={handleCancelRemove}
+      />
     </View>
   );
 };

@@ -8,11 +8,12 @@ import {
   Text,
   StyleSheet,
   ScrollView,
-  Alert,
   TouchableOpacity,
   KeyboardAvoidingView,
   Platform
 } from 'react-native';
+import { showToast } from '../../components/common/ToastManager';
+import { ConfirmationDialog } from '../../components/common/ConfirmationDialog';
 import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { RootStackParamList } from '../../navigation/AppNavigator';
@@ -35,6 +36,9 @@ export const CreateSessionScreen: React.FC = () => {
   const [players, setPlayers] = useState<Player[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showRemoveConfirmation, setShowRemoveConfirmation] = useState(false);
+  const [showStartGameConfirmation, setShowStartGameConfirmation] = useState(false);
+  const [playerToRemove, setPlayerToRemove] = useState<string | null>(null);
 
   const sessionService = SessionService.getInstance();
   const transactionService = TransactionService.getInstance();
@@ -64,7 +68,12 @@ export const CreateSessionScreen: React.FC = () => {
       setError(errorMessage);
       
       // Show alert for user feedback
-      Alert.alert('Error', errorMessage);
+      showToast({
+        type: 'error',
+        title: '❌ Session Creation Failed',
+        message: errorMessage,
+        duration: 4000,
+      });
     } finally {
       setLoading(false);
     }
@@ -117,7 +126,12 @@ export const CreateSessionScreen: React.FC = () => {
         : 'Failed to add player. Please try again.';
       setError(errorMessage);
       
-      Alert.alert('Error', errorMessage);
+      showToast({
+        type: 'error',
+        title: '❌ Session Creation Failed',
+        message: errorMessage,
+        duration: 4000,
+      });
     } finally {
       setLoading(false);
     }
@@ -129,41 +143,40 @@ export const CreateSessionScreen: React.FC = () => {
    */
   const handleRemovePlayer = async (playerId: string) => {
     if (!session) return;
+    setPlayerToRemove(playerId);
+    setShowRemoveConfirmation(true);
+  };
 
-    // Confirm removal
-    Alert.alert(
-      'Remove Player',
-      'Are you sure you want to remove this player?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Remove',
-          style: 'destructive',
-          onPress: async () => {
-            setLoading(true);
-            setError(null);
+  const confirmRemovePlayer = async () => {
+    if (!session || !playerToRemove) return;
+    
+    setShowRemoveConfirmation(false);
+    setLoading(true);
+    setError(null);
 
-            try {
-              await sessionService.removePlayer(session.id, playerId);
-              
-              setPlayers(prev => prev.filter(p => p.id !== playerId));
-              
-              // Update session player count
-              setSession(prev => prev ? { ...prev, playerCount: prev.playerCount - 1 } : null);
-            } catch (err) {
-              const errorMessage = err instanceof ServiceError 
-                ? err.message 
-                : 'Failed to remove player. Please try again.';
-              setError(errorMessage);
-              
-              Alert.alert('Error', errorMessage);
-            } finally {
-              setLoading(false);
-            }
-          }
-        }
-      ]
-    );
+    try {
+      await sessionService.removePlayer(session.id, playerToRemove);
+      
+      setPlayers(prev => prev.filter(p => p.id !== playerToRemove));
+      
+      // Update session player count
+      setSession(prev => prev ? { ...prev, playerCount: prev.playerCount - 1 } : null);
+    } catch (err) {
+      const errorMessage = err instanceof ServiceError 
+        ? err.message 
+        : 'Failed to remove player. Please try again.';
+      setError(errorMessage);
+      
+      showToast({
+        type: 'error',
+        title: '❌ Remove Player Failed',
+        message: errorMessage,
+        duration: 4000,
+      });
+    } finally {
+      setLoading(false);
+      setPlayerToRemove(null);
+    }
   };
 
   /**
@@ -172,34 +185,34 @@ export const CreateSessionScreen: React.FC = () => {
    */
   const handleStartGame = async () => {
     if (!session || players.length < 4) return;
+    setShowStartGameConfirmation(true);
+  };
 
-    Alert.alert(
-      'Start Game',
-      `Start poker game with ${players.length} players?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Start Game',
-          onPress: async () => {
-            setLoading(true);
-            try {
-              await sessionService.updateSessionStatus(session.id, 'active');
-              navigation.navigate('LiveGame', { 
-                sessionId: session.id, 
-                sessionName: session.name 
-              });
-            } catch (err) {
-              const errorMessage = err instanceof ServiceError 
-                ? err.message 
-                : 'Failed to start game. Please try again.';
-              Alert.alert('Error', errorMessage);
-            } finally {
-              setLoading(false);
-            }
-          }
-        }
-      ]
-    );
+  const confirmStartGame = async () => {
+    if (!session) return;
+    
+    setShowStartGameConfirmation(false);
+    setLoading(true);
+    
+    try {
+      await sessionService.updateSessionStatus(session.id, 'active');
+      navigation.navigate('LiveGame', { 
+        sessionId: session.id, 
+        sessionName: session.name 
+      });
+    } catch (err) {
+      const errorMessage = err instanceof ServiceError 
+        ? err.message 
+        : 'Failed to start game. Please try again.';
+      showToast({
+        type: 'error',
+        title: '❌ Start Game Failed',
+        message: errorMessage,
+        duration: 4000,
+      });
+    } finally {
+      setLoading(false);
+    }
   };
 
   /**
@@ -292,6 +305,32 @@ export const CreateSessionScreen: React.FC = () => {
           </>
         )}
       </ScrollView>
+      
+      {/* Confirmation Dialogs */}
+      <ConfirmationDialog
+        visible={showRemoveConfirmation}
+        title="Remove Player"
+        message="Are you sure you want to remove this player?"
+        confirmText="Remove"
+        cancelText="Cancel"
+        confirmStyle="destructive"
+        onConfirm={confirmRemovePlayer}
+        onCancel={() => {
+          setShowRemoveConfirmation(false);
+          setPlayerToRemove(null);
+        }}
+      />
+      
+      <ConfirmationDialog
+        visible={showStartGameConfirmation}
+        title="Start Game"
+        message={`Start poker game with ${players.length} players?`}
+        confirmText="Start Game"
+        cancelText="Cancel"
+        confirmStyle="default"
+        onConfirm={confirmStartGame}
+        onCancel={() => setShowStartGameConfirmation(false)}
+      />
     </KeyboardAvoidingView>
   );
 };

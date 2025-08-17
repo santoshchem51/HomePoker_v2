@@ -16,6 +16,8 @@ import {
   TouchableOpacity,
   Alert,
 } from 'react-native';
+import { showToast } from '../../components/common/ToastManager';
+import { ConfirmationDialog } from '../../components/common/ConfirmationDialog';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { RootStackParamList } from '../../navigation/AppNavigator';
@@ -27,6 +29,8 @@ import { AmountInputModal } from '../../components/common/AmountInputModal';
 import { PlayerActionButtons } from '../../components/poker/PlayerActionButtons';
 import { ServiceError, ErrorCode } from '../../types/errors';
 import { Player } from '../../types/player';
+import ChipAnimation from '../../components/animations/ChipAnimation';
+import AnimatedBalanceCounter from '../../components/animations/AnimatedBalanceCounter';
 
 type LiveGameScreenNavigationProp = StackNavigationProp<RootStackParamList, 'LiveGame'>;
 type LiveGameScreenRouteProp = RouteProp<RootStackParamList, 'LiveGame'>;
@@ -58,9 +62,21 @@ const LiveGameScreenComponent: React.FC = () => {
   // Transaction loading state
   const [transactionLoading, setTransactionLoading] = useState(false);
   
+  // Chip animation state
+  const [chipAnimations, setChipAnimations] = useState<Array<{
+    id: string;
+    amount: number;
+    type: 'buy-in' | 'cash-out';
+    startX: number;
+    startY: number;
+  }>>([]);
+  
   // Organizer confirmation state
   const [showOrganizerConfirmation, setShowOrganizerConfirmation] = useState(false);
   const [pendingCashOut, setPendingCashOut] = useState<{ player: Player; amount: number } | null>(null);
+  
+  // End session confirmation state
+  const [showEndSessionConfirmation, setShowEndSessionConfirmation] = useState(false);
 
   // Store hooks - only basic session management
   const {
@@ -121,19 +137,43 @@ const LiveGameScreenComponent: React.FC = () => {
       if (modalState.transactionType === 'buy_in') {
         await recordBuyIn(sessionId, modalState.selectedPlayer.id, amount);
         
-        Alert.alert(
-          'Success',
-          `Buy-in of $${amount.toFixed(2)} recorded for ${modalState.selectedPlayer.name}!`,
-          [{ text: 'OK' }]
-        );
+        // Trigger chip animation for buy-in
+        const chipAnimationId = Date.now().toString();
+        setChipAnimations(prev => [...prev, {
+          id: chipAnimationId,
+          amount,
+          type: 'buy-in',
+          startX: 200, // Center of screen
+          startY: 300  // Approximate player row position
+        }]);
+        
+        // Show success toast
+        showToast({
+          type: 'success',
+          title: '🎯 Buy-in Recorded',
+          message: `$${amount.toFixed(2)} for ${modalState.selectedPlayer.name}`,
+          duration: 2000,
+        });
       } else {
         await recordCashOut(sessionId, modalState.selectedPlayer.id, amount);
         
-        Alert.alert(
-          'Success',
-          `Cash-out of $${amount.toFixed(2)} recorded for ${modalState.selectedPlayer.name}!`,
-          [{ text: 'OK' }]
-        );
+        // Trigger chip animation for cash-out
+        const chipAnimationId = Date.now().toString();
+        setChipAnimations(prev => [...prev, {
+          id: chipAnimationId,
+          amount,
+          type: 'cash-out',
+          startX: 200, // Center of screen
+          startY: 300  // Approximate player row position
+        }]);
+        
+        // Show success toast
+        showToast({
+          type: 'success',
+          title: '💰 Cash-out Recorded',
+          message: `$${amount.toFixed(2)} for ${modalState.selectedPlayer.name}`,
+          duration: 2000,
+        });
       }
       
       // Close modal on success
@@ -150,11 +190,12 @@ const LiveGameScreenComponent: React.FC = () => {
         return;
       }
       
-      Alert.alert(
-        'Error',
-        error instanceof ServiceError ? error.message : `Failed to record ${modalState.transactionType.replace('_', '-')}. Please try again.`,
-        [{ text: 'OK' }]
-      );
+      showToast({
+        type: 'error',
+        title: '❌ Transaction Failed',
+        message: error instanceof ServiceError ? error.message : `Failed to record ${modalState.transactionType.replace('_', '-')}`,
+        duration: 3000,
+      });
       throw error;
     } finally {
       setTransactionLoading(false);
@@ -175,21 +216,23 @@ const LiveGameScreenComponent: React.FC = () => {
     try {
       await recordCashOut(sessionId, pendingCashOut.player.id, pendingCashOut.amount, true);
       
-      Alert.alert(
-        'Success',
-        `Cash-out of $${pendingCashOut.amount.toFixed(2)} recorded for ${pendingCashOut.player.name} with organizer approval!`,
-        [{ text: 'OK' }]
-      );
+      showToast({
+        type: 'success',
+        title: '✅ Organizer Approved',
+        message: `$${pendingCashOut.amount.toFixed(2)} cash-out for ${pendingCashOut.player.name}`,
+        duration: 2000,
+      });
       
       setPendingCashOut(null);
       
     } catch (error) {
       console.error('Confirmed cash-out submission failed:', error);
-      Alert.alert(
-        'Error',
-        error instanceof ServiceError ? error.message : 'Failed to record cash-out. Please try again.',
-        [{ text: 'OK' }]
-      );
+      showToast({
+        type: 'error',
+        title: '❌ Cash-out Failed',
+        message: error instanceof ServiceError ? error.message : 'Failed to record cash-out. Please try again.',
+        duration: 3000,
+      });
       setPendingCashOut(null);
     } finally {
       setTransactionLoading(false);
@@ -203,38 +246,36 @@ const LiveGameScreenComponent: React.FC = () => {
       
       if (activePlayers.length > 0) {
         const playerNames = activePlayers.map(p => p.name).join(', ');
-        Alert.alert(
-          'Players Still Active',
-          `${playerNames} haven't cashed out yet. Please record their cash-outs before ending the session.`,
-          [
-            { text: 'OK', style: 'default' }
-          ]
-        );
+        showToast({
+          type: 'info',
+          title: '⚠️ Players Still Active',
+          message: `${playerNames} haven't cashed out yet`,
+          duration: 4000,
+        });
         return;
       }
 
       // If no players have chips, proceed with normal end session confirmation
-      Alert.alert(
-        'End Session',
-        'Are you sure you want to end this poker session?',
-        [
-          { text: 'Cancel', style: 'cancel' },
-          { 
-            text: 'End Session', 
-            style: 'destructive', 
-            onPress: () => navigation.navigate('Settlement', { 
-              sessionId, 
-              sessionName,
-              isSessionEnd: true
-            })
-          },
-        ]
-      );
+      setShowEndSessionConfirmation(true);
     } catch (error) {
       console.error('Error checking session end state:', error);
-      Alert.alert('Error', 'Failed to check session state. Please try again.');
+      showToast({
+        type: 'error',
+        title: '❌ Session Error',
+        message: 'Failed to check session state. Please try again.',
+        duration: 3000,
+      });
     }
   }, [players, sessionId, sessionName, navigation]);
+
+  const confirmEndSession = () => {
+    setShowEndSessionConfirmation(false);
+    navigation.navigate('Settlement', { 
+      sessionId, 
+      sessionName,
+      isSessionEnd: true
+    });
+  };
 
   // Setup cleanup for component state
   useEffect(() => {
@@ -299,9 +340,11 @@ const LiveGameScreenComponent: React.FC = () => {
                 <View style={styles.playerInfo}>
                   <Text style={[styles.playerName, { color: isDarkMode ? DarkPokerColors.primaryText : '#333' }]}>{player.name}</Text>
                   <View style={styles.playerFinancials}>
-                    <Text style={[styles.playerBalance, { color: isDarkMode ? DarkPokerColors.secondaryText : '#1976D2' }]}>
-                      ${(player.currentBalance || 0).toFixed(2)}
-                    </Text>
+                    <AnimatedBalanceCounter
+                      value={player.currentBalance || 0}
+                      decimals={2}
+                      style={[styles.playerBalance, { color: isDarkMode ? DarkPokerColors.secondaryText : '#1976D2' }]}
+                    />
                     <Text style={[styles.playerBuyIns, { color: isDarkMode ? DarkPokerColors.secondaryText : '#666' }]}>
                       (${(player.totalBuyIns || 0).toFixed(2)} in)
                     </Text>
@@ -384,6 +427,32 @@ const LiveGameScreenComponent: React.FC = () => {
           </View>
         </View>
       )}
+      
+      {/* Chip Animations */}
+      {chipAnimations.map((chipAnim) => (
+        <ChipAnimation
+          key={chipAnim.id}
+          amount={chipAnim.amount}
+          type={chipAnim.type}
+          startX={chipAnim.startX}
+          startY={chipAnim.startY}
+          onComplete={() => {
+            setChipAnimations(prev => prev.filter(anim => anim.id !== chipAnim.id));
+          }}
+        />
+      ))}
+      
+      {/* End Session Confirmation Dialog */}
+      <ConfirmationDialog
+        visible={showEndSessionConfirmation}
+        title="End Session"
+        message="Are you sure you want to end this poker session?"
+        confirmText="End Session"
+        cancelText="Cancel"
+        confirmStyle="destructive"
+        onConfirm={confirmEndSession}
+        onCancel={() => setShowEndSessionConfirmation(false)}
+      />
     </View>
   );
 };

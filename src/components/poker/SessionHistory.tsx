@@ -4,10 +4,11 @@ import {
   Text,
   TouchableOpacity,
   FlatList,
-  Alert,
   StyleSheet,
   RefreshControl
 } from 'react-native';
+import { showToast } from '../common/ToastManager';
+import { ConfirmationDialog } from '../common/ConfirmationDialog';
 import { SessionService } from '../../services/core/SessionService';
 import { ExportService } from '../../services/infrastructure/ExportService';
 import { NotificationService } from '../../services/infrastructure/NotificationService';
@@ -38,6 +39,8 @@ export const SessionHistory: React.FC<SessionHistoryProps> = ({
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [exporting, setExporting] = useState<string | null>(null);
+  const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
+  const [sessionToDelete, setSessionToDelete] = useState<HistorySession | null>(null);
 
   const sessionService = SessionService.getInstance();
   const exportService = ExportService.getInstance();
@@ -75,7 +78,12 @@ export const SessionHistory: React.FC<SessionHistoryProps> = ({
     } catch (error) {
       console.error('Failed to load session history:', error);
       const errorMessage = error instanceof Error ? error.message : 'Failed to load session history';
-      Alert.alert('Error', errorMessage);
+      showToast({
+        type: 'error',
+        title: '❌ Load Error',
+        message: errorMessage,
+        duration: 3000,
+      });
     } finally {
       setLoading(false);
     }
@@ -98,24 +106,35 @@ export const SessionHistory: React.FC<SessionHistoryProps> = ({
   };
 
   const handleDeleteSession = async (session: HistorySession) => {
-    const confirmed = await notificationService.confirmAction(
-      'Delete Session',
-      `Are you sure you want to permanently delete "${session.name}"? This action cannot be undone.`
-    );
+    setSessionToDelete(session);
+    setShowDeleteConfirmation(true);
+  };
 
-    if (confirmed) {
-      try {
-        await sessionService.deleteSession(session.id);
-        await loadSessions();
-        await notificationService.showImmediateAlert(
-          'Session Deleted',
-          'Session has been permanently removed.'
-        );
-      } catch (error) {
-        console.error('Failed to delete session:', error);
-        const errorMessage = error instanceof Error ? error.message : 'Failed to delete session';
-        Alert.alert('Error', errorMessage);
-      }
+  const confirmDeleteSession = async () => {
+    if (!sessionToDelete) return;
+    
+    setShowDeleteConfirmation(false);
+    
+    try {
+      await sessionService.deleteSession(sessionToDelete.id);
+      await loadSessions();
+      showToast({
+        type: 'success',
+        title: '✅ Session Deleted',
+        message: 'Session has been permanently removed.',
+        duration: 2000,
+      });
+    } catch (error) {
+      console.error('Failed to delete session:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Failed to delete session';
+      showToast({
+        type: 'error',
+        title: '❌ Delete Failed',
+        message: errorMessage,
+        duration: 3000,
+      });
+    } finally {
+      setSessionToDelete(null);
     }
   };
 
@@ -124,11 +143,12 @@ export const SessionHistory: React.FC<SessionHistoryProps> = ({
       onViewSettlement(session.id, session.name);
     } else {
       // Fallback - show basic settlement info
-      Alert.alert(
-        'Settlement Statement',
-        `Session: ${session.name}\nTotal Pot: ${formatCurrency(session.totalPot)}\nPlayers: ${session.playerCount}\nCompleted: ${session.completedAt ? formatDate(session.completedAt.toString()) : 'In Progress'}`,
-        [{ text: 'OK' }]
-      );
+      showToast({
+        type: 'info',
+        title: '📊 Settlement Statement',
+        message: `${session.name}\nTotal Pot: ${formatCurrency(session.totalPot)}\nPlayers: ${session.playerCount}`,
+        duration: 4000,
+      });
     }
   };
 
@@ -150,7 +170,12 @@ export const SessionHistory: React.FC<SessionHistoryProps> = ({
     } catch (error) {
       console.error('Export failed:', error);
       const errorMessage = error instanceof Error ? error.message : 'Failed to export session data';
-      Alert.alert('Export Failed', errorMessage);
+      showToast({
+        type: 'error',
+        title: '❌ Export Failed',
+        message: errorMessage,
+        duration: 3000,
+      });
     } finally {
       setExporting(null);
     }
@@ -335,6 +360,21 @@ export const SessionHistory: React.FC<SessionHistoryProps> = ({
         }
         contentContainerStyle={styles.listContainer}
         showsVerticalScrollIndicator={false}
+      />
+      
+      {/* Delete Confirmation Dialog */}
+      <ConfirmationDialog
+        visible={showDeleteConfirmation}
+        title="Delete Session"
+        message={sessionToDelete ? `Are you sure you want to permanently delete "${sessionToDelete.name}"? This action cannot be undone.` : ''}
+        confirmText="Delete"
+        cancelText="Cancel"
+        confirmStyle="destructive"
+        onConfirm={confirmDeleteSession}
+        onCancel={() => {
+          setShowDeleteConfirmation(false);
+          setSessionToDelete(null);
+        }}
       />
     </View>
   );

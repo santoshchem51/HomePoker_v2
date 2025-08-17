@@ -10,10 +10,10 @@ import {
   Text,
   ScrollView,
   StyleSheet,
-  Alert,
   TouchableOpacity,
   ActivityIndicator,
 } from 'react-native';
+import { showToast } from '../../components/common/ToastManager';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { RootStackParamList } from '../../navigation/AppNavigator';
@@ -91,7 +91,12 @@ export const SettlementScreen: React.FC = () => {
     } catch (err) {
       console.error('Failed to load settlement:', err);
       setError('Failed to load settlement data');
-      Alert.alert('Error', 'Failed to load settlement data');
+      showToast({
+        type: 'error',
+        title: '❌ Settlement Error',
+        message: 'Failed to load settlement data',
+        duration: 3000,
+      });
     } finally {
       setLoading(false);
     }

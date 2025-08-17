@@ -14,6 +14,7 @@ import { ThemeProvider, useTheme } from './src/contexts/ThemeContext';
 import { BrightnessOverlay } from './src/components/common/BrightnessControl';
 import { DarkPokerColors } from './src/styles/darkTheme.styles';
 import AppNavigator from './src/navigation/AppNavigator';
+import ToastManager from './src/components/common/ToastManager';
 
 // Performance monitoring for startup
 let startupStartTime = Date.now();
@@ -286,7 +287,12 @@ function ThemedAppContent() {
   }
 
   // Now that we have navigation, show the main app
-  return <AppNavigator />;
+  return (
+    <>
+      <AppNavigator />
+      <ToastManager />
+    </>
+  );
 }
 
 // Main App component with ThemeProvider wrapper

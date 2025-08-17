@@ -18,6 +18,8 @@ import { BrightnessOverlay } from '../components/common/BrightnessControl';
 import { DarkPokerColors } from '../styles/darkTheme.styles';
 import { RootStackParamList } from '../navigation/AppNavigator';
 import { useSessionStore } from '../stores/sessionStore';
+import AnimatedButton from '../components/ui/AnimatedButton';
+import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
 
 type HomeScreenNavigationProp = StackNavigationProp<RootStackParamList, 'Home'>;
 
@@ -54,83 +56,109 @@ export default function HomeScreen() {
       <StatusBar barStyle={isDarkMode ? 'light-content' : 'dark-content'} />
       
       <View style={[styles.contentContainer, { backgroundColor: isDarkMode ? DarkPokerColors.background : '#f5f5f5' }]}>
-        <Text style={[styles.title, { color: isDarkMode ? DarkPokerColors.goldChip : '#2196F3' }]}>
+        <Animated.Text 
+          entering={FadeIn.duration(600)}
+          style={[styles.title, { color: isDarkMode ? DarkPokerColors.goldChip : '#2196F3' }]}
+        >
           🎰 PokePot
-        </Text>
-        <Text style={[styles.subtitle, { color: isDarkMode ? DarkPokerColors.success : '#4CAF50' }]}>
+        </Animated.Text>
+        <Animated.Text 
+          entering={FadeIn.delay(300).duration(600)}
+          style={[styles.subtitle, { color: isDarkMode ? DarkPokerColors.success : '#4CAF50' }]}
+        >
           Professional poker session management
-        </Text>
+        </Animated.Text>
 
         {/* Active Sessions Section */}
         {activeSessions.length > 0 && (
-          <View style={styles.activeSessionsContainer}>
+          <Animated.View 
+            style={styles.activeSessionsContainer}
+            entering={FadeInDown.delay(100).springify()}
+          >
             <Text style={[styles.activeSessionsTitle, { color: isDarkMode ? DarkPokerColors.goldChip : '#FF9800' }]}>
               🎮 Continue Active Session
             </Text>
-            {activeSessions.map((session) => (
-              <TouchableOpacity 
+            {activeSessions.map((session, index) => (
+              <Animated.View
                 key={session.id}
-                style={[styles.activeSessionButton, { 
-                  backgroundColor: isDarkMode ? DarkPokerColors.cardBackground : '#fff',
-                  borderColor: isDarkMode ? DarkPokerColors.goldChip : '#FF9800'
-                }]}
-                onPress={() => handleContinueSession(session.id, session.name)}
+                entering={FadeInDown.delay(150 + index * 50).springify()}
               >
-                <Text style={[styles.activeSessionText, { 
-                  color: isDarkMode ? DarkPokerColors.primaryText : '#333' 
-                }]}>
-                  {session.name}
-                </Text>
-                <Text style={[styles.activeSessionStatus, { 
-                  color: isDarkMode ? DarkPokerColors.goldChip : '#FF9800' 
-                }]}>
-                  {session.status === 'active' ? '● Active' : '○ Created'}
-                </Text>
-              </TouchableOpacity>
+                <AnimatedButton 
+                  style={[styles.activeSessionButton, { 
+                    backgroundColor: isDarkMode ? DarkPokerColors.cardBackground : '#fff',
+                    borderColor: isDarkMode ? DarkPokerColors.goldChip : '#FF9800'
+                  }]}
+                  onPress={() => handleContinueSession(session.id, session.name)}
+                  hapticType="light"
+                  scaleAmount={0.98}
+                >
+                  <View>
+                    <Text style={[styles.activeSessionText, { 
+                      color: isDarkMode ? DarkPokerColors.primaryText : '#333' 
+                    }]}>
+                      {session.name}
+                    </Text>
+                    <Text style={[styles.activeSessionStatus, { 
+                      color: isDarkMode ? DarkPokerColors.goldChip : '#FF9800' 
+                    }]}>
+                      {session.status === 'active' ? '● Active' : '○ Created'}
+                    </Text>
+                  </View>
+                </AnimatedButton>
+              </Animated.View>
             ))}
-          </View>
+          </Animated.View>
         )}
         
-        <View style={styles.buttonContainer}>
-          <TouchableOpacity 
+        <Animated.View 
+          style={styles.buttonContainer}
+          entering={FadeInDown.delay(200).springify()}
+        >
+          <AnimatedButton 
             style={[styles.primaryButton, { 
               backgroundColor: isDarkMode ? DarkPokerColors.buttonPrimary : '#2196F3' 
             }]}
             onPress={handleStartSession}
+            hapticType="medium"
+            scaleAmount={0.96}
           >
             <Text style={[styles.primaryButtonText, { 
               color: isDarkMode ? DarkPokerColors.background : '#fff' 
             }]}>
               Start New Session
             </Text>
-          </TouchableOpacity>
+          </AnimatedButton>
 
-          <TouchableOpacity 
+          <AnimatedButton 
             style={[styles.secondaryButton, { 
               borderColor: isDarkMode ? DarkPokerColors.buttonPrimary : '#2196F3' 
             }]}
             onPress={handleViewHistory}
+            hapticType="light"
+            scaleAmount={0.97}
           >
             <Text style={[styles.secondaryButtonText, { 
               color: isDarkMode ? DarkPokerColors.buttonPrimary : '#2196F3' 
             }]}>
               View Session History
             </Text>
-          </TouchableOpacity>
+          </AnimatedButton>
 
-          <TouchableOpacity 
+          <AnimatedButton 
             style={[styles.secondaryButton, { 
               borderColor: isDarkMode ? DarkPokerColors.secondaryText : '#666' 
             }]}
             onPress={handleSettings}
+            hapticType="light"
+            scaleAmount={0.97}
           >
             <Text style={[styles.secondaryButtonText, { 
               color: isDarkMode ? DarkPokerColors.secondaryText : '#666' 
             }]}>
               Settings
             </Text>
-          </TouchableOpacity>
-        </View>
+          </AnimatedButton>
+        </Animated.View>
         
         <Text style={[styles.statusText, { color: isDarkMode ? DarkPokerColors.secondaryText : '#666' }]}>
           Voice commands, settlements & WhatsApp sharing ready!

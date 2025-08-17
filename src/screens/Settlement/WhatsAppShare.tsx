@@ -9,11 +9,11 @@ import {
   Text,
   TouchableOpacity,
   ScrollView,
-  Alert,
   Share,
   Linking,
   StyleSheet,
 } from 'react-native';
+import { showToast } from '../../components/common/ToastManager';
 import Clipboard from '@react-native-clipboard/clipboard';
 import { WhatsAppService } from '../../services/integration/WhatsAppService';
 import { SettlementService } from '../../services/settlement/SettlementService';
@@ -117,7 +117,12 @@ export const WhatsAppShare: React.FC<WhatsAppShareProps> = ({
       setShowPreview(true);
     } catch (error) {
       console.error('Preview generation failed:', error);
-      Alert.alert('Error', 'Failed to generate message preview');
+      showToast({
+        type: 'error',
+        title: '❌ Preview Error',
+        message: 'Failed to generate message preview',
+        duration: 3000,
+      });
     }
   }, [generateEnhancedMessage]);
 
@@ -134,18 +139,38 @@ export const WhatsAppShare: React.FC<WhatsAppShareProps> = ({
       
       if (result.success) {
         if (result.method === 'whatsapp') {
-          Alert.alert('Success', 'WhatsApp opened with your message!');
+          showToast({
+            type: 'success',
+            title: '✅ WhatsApp Opened',
+            message: 'Message ready to send!',
+            duration: 2000,
+          });
         } else if (result.method === 'clipboard') {
-          Alert.alert('Copied', 'WhatsApp not available. Message copied to clipboard!');
+          showToast({
+            type: 'info',
+            title: '📋 Copied to Clipboard',
+            message: 'WhatsApp not available. Message copied!',
+            duration: 3000,
+          });
         }
       } else {
-        Alert.alert('Error', result.error || 'Failed to share message');
+        showToast({
+          type: 'error',
+          title: '❌ Share Failed',
+          message: result.error || 'Failed to share message',
+          duration: 3000,
+        });
       }
       
       onShareComplete?.(result);
     } catch (error) {
       console.error('WhatsApp share failed:', error);
-      Alert.alert('Error', 'Failed to share to WhatsApp');
+      showToast({
+        type: 'error',
+        title: '❌ WhatsApp Error',
+        message: 'Failed to share to WhatsApp',
+        duration: 3000,
+      });
     } finally {
       setIsSharing(false);
     }
@@ -160,7 +185,12 @@ export const WhatsAppShare: React.FC<WhatsAppShareProps> = ({
       }
       
       await Clipboard.setString(previewMessage);
-      Alert.alert('Copied!', 'Settlement message copied to clipboard');
+      showToast({
+        type: 'success',
+        title: '📋 Copied!',
+        message: 'Settlement message copied to clipboard',
+        duration: 2000,
+      });
       
       onShareComplete?.({
         success: true,
@@ -168,7 +198,12 @@ export const WhatsAppShare: React.FC<WhatsAppShareProps> = ({
       });
     } catch (error) {
       console.error('Clipboard copy failed:', error);
-      Alert.alert('Error', 'Failed to copy to clipboard');
+      showToast({
+        type: 'error',
+        title: '❌ Copy Failed',
+        message: 'Failed to copy to clipboard',
+        duration: 3000,
+      });
     }
   }, [previewMessage, onShareComplete, handleShowPreview]);
 
@@ -186,7 +221,12 @@ export const WhatsAppShare: React.FC<WhatsAppShareProps> = ({
       });
 
       if (result.action === Share.sharedAction) {
-        Alert.alert('Shared!', 'Message shared successfully');
+        showToast({
+          type: 'success',
+          title: '📤 Shared!',
+          message: 'Message shared successfully',
+          duration: 2000,
+        });
         onShareComplete?.({
           success: true,
           method: 'other'
@@ -194,7 +234,12 @@ export const WhatsAppShare: React.FC<WhatsAppShareProps> = ({
       }
     } catch (error) {
       console.error('Native share failed:', error);
-      Alert.alert('Error', 'Failed to share message');
+      showToast({
+        type: 'error',
+        title: '❌ Share Error',
+        message: 'Failed to share message',
+        duration: 3000,
+      });
     }
   }, [previewMessage, sessionName, onShareComplete, handleShowPreview]);
 
@@ -211,17 +256,32 @@ export const WhatsAppShare: React.FC<WhatsAppShareProps> = ({
       
       if (canOpen) {
         await Linking.openURL(smsUrl);
-        Alert.alert('SMS', 'SMS app opened with your message');
+        showToast({
+          type: 'success',
+          title: '💬 SMS Opened',
+          message: 'SMS app opened with your message',
+          duration: 2000,
+        });
         onShareComplete?.({
           success: true,
           method: 'other'
         });
       } else {
-        Alert.alert('Error', 'SMS not available on this device');
+        showToast({
+          type: 'error',
+          title: '❌ SMS Unavailable',
+          message: 'SMS not available on this device',
+          duration: 3000,
+        });
       }
     } catch (error) {
       console.error('SMS share failed:', error);
-      Alert.alert('Error', 'Failed to open SMS');
+      showToast({
+        type: 'error',
+        title: '❌ SMS Error',
+        message: 'Failed to open SMS',
+        duration: 3000,
+      });
     }
   }, [previewMessage, onShareComplete, handleShowPreview]);
 
@@ -241,17 +301,32 @@ export const WhatsAppShare: React.FC<WhatsAppShareProps> = ({
       
       if (canOpen) {
         await Linking.openURL(emailUrl);
-        Alert.alert('Email', 'Email app opened with your message');
+        showToast({
+          type: 'success',
+          title: '📧 Email Opened',
+          message: 'Email app opened with your message',
+          duration: 2000,
+        });
         onShareComplete?.({
           success: true,
           method: 'other'
         });
       } else {
-        Alert.alert('Error', 'Email not available on this device');
+        showToast({
+          type: 'error',
+          title: '❌ Email Unavailable',
+          message: 'Email not available on this device',
+          duration: 3000,
+        });
       }
     } catch (error) {
       console.error('Email share failed:', error);
-      Alert.alert('Error', 'Failed to open email');
+      showToast({
+        type: 'error',
+        title: '❌ Email Error',
+        message: 'Failed to open email',
+        duration: 3000,
+      });
     }
   }, [previewMessage, sessionName, onShareComplete, handleShowPreview]);
 

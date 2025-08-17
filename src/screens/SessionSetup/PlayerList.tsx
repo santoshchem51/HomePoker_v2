@@ -10,9 +10,9 @@ import {
   TouchableOpacity,
   FlatList,
   StyleSheet,
-  Alert,
   ActivityIndicator
 } from 'react-native';
+import { showToast } from '../../components/common/ToastManager';
 import { Player } from '../../types/player';
 import { PlayerCard } from './PlayerCard';
 
@@ -118,7 +118,12 @@ export const PlayerList: React.FC<PlayerListProps> = ({
     const nameValidationError = validatePlayerName(newPlayerName);
     if (nameValidationError) {
       setError(nameValidationError);
-      Alert.alert('Invalid Input', nameValidationError);
+      showToast({
+        type: 'error',
+        title: '❌ Invalid Input',
+        message: nameValidationError,
+        duration: 3000,
+      });
       return;
     }
 
@@ -126,14 +131,24 @@ export const PlayerList: React.FC<PlayerListProps> = ({
     const buyInValidationError = validateBuyInAmount(buyInAmount);
     if (buyInValidationError) {
       setError(buyInValidationError);
-      Alert.alert('Invalid Buy-in Amount', buyInValidationError);
+      showToast({
+        type: 'error',
+        title: '❌ Invalid Buy-in Amount',
+        message: buyInValidationError,
+        duration: 3000,
+      });
       return;
     }
 
     if (players.length >= maxPlayers) {
       const errorMsg = `Cannot add more than ${maxPlayers} players`;
       setError(errorMsg);
-      Alert.alert('Maximum Players Reached', errorMsg);
+      showToast({
+        type: 'error',
+        title: '❌ Maximum Players Reached',
+        message: errorMsg,
+        duration: 3000,
+      });
       return;
     }
 

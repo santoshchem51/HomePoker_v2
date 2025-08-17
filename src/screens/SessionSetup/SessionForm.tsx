@@ -10,8 +10,8 @@ import {
   TouchableOpacity,
   StyleSheet,
   ActivityIndicator,
-  Alert
 } from 'react-native';
+import { showToast } from '../../components/common/ToastManager';
 import { useTheme } from '../../contexts/ThemeContext';
 import { DarkPokerColors } from '../../styles/darkTheme.styles';
 import { RealVoiceService } from '../../services/integration/RealVoiceService';
@@ -48,11 +48,12 @@ const VoiceInputButton: React.FC<{
           console.log('Voice recognition result:', result);
           if (result.text && result.text.trim()) {
             onVoiceInput(result.text.trim());
-            Alert.alert(
-              'Voice Input Complete',
-              `Recognized: "${result.text}"`,
-              [{ text: 'OK' }]
-            );
+            showToast({
+              type: 'success',
+              title: '🎤 Voice Input Complete',
+              message: `Recognized: "${result.text}"`,
+              duration: 2000,
+            });
           }
           setIsRecording(false);
         },
@@ -61,35 +62,12 @@ const VoiceInputButton: React.FC<{
           setIsRecording(false);
           
           // Fallback to manual input on error
-          Alert.alert(
-            'Voice Recognition Error',
-            `${error}\n\nWould you like to enter text manually?`,
-            [
-              { text: 'Cancel', style: 'cancel' },
-              {
-                text: 'Yes, Type Manually',
-                onPress: () => {
-                  // Fallback to manual input
-                  Alert.prompt(
-                    'Enter Text',
-                    'Please enter the text manually:',
-                    [
-                      { text: 'Cancel', style: 'cancel' },
-                      {
-                        text: 'OK',
-                        onPress: (text?: string) => {
-                          if (text && text.trim()) {
-                            onVoiceInput(text.trim());
-                          }
-                        }
-                      }
-                    ],
-                    'plain-text'
-                  );
-                }
-              }
-            ]
-          );
+          showToast({
+            type: 'error',
+            title: '❌ Voice Recognition Error',
+            message: `${error}. Please enter text manually.`,
+            duration: 4000,
+          });
         },
         onEnd: () => {
           setIsRecording(false);
@@ -100,34 +78,12 @@ const VoiceInputButton: React.FC<{
       if (!started) {
         setIsRecording(false);
         // Voice not available, fallback to manual
-        Alert.alert(
-          'Voice Not Available',
-          'Voice recognition is not available. Please enter text manually.',
-          [
-            { text: 'Cancel', style: 'cancel' },
-            {
-              text: 'Enter Manually',
-              onPress: () => {
-                Alert.prompt(
-                  'Enter Text',
-                  'Please enter the text:',
-                  [
-                    { text: 'Cancel', style: 'cancel' },
-                    {
-                      text: 'OK',
-                      onPress: (text?: string) => {
-                        if (text && text.trim()) {
-                          onVoiceInput(text.trim());
-                        }
-                      }
-                    }
-                  ],
-                  'plain-text'
-                );
-              }
-            }
-          ]
-        );
+        showToast({
+          type: 'info',
+          title: '🎤 Voice Not Available',
+          message: 'Voice recognition is not available. Please type manually.',
+          duration: 3000,
+        });
       }
     }
   };
