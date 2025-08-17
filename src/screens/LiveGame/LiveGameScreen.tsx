@@ -343,7 +343,10 @@ const LiveGameScreenComponent: React.FC = () => {
                     <AnimatedBalanceCounter
                       value={player.currentBalance || 0}
                       decimals={2}
-                      style={[styles.playerBalance, { color: isDarkMode ? DarkPokerColors.secondaryText : '#1976D2' }]}
+                      style={{
+                        ...styles.playerBalance,
+                        color: isDarkMode ? DarkPokerColors.secondaryText : '#1976D2'
+                      }}
                     />
                     <Text style={[styles.playerBuyIns, { color: isDarkMode ? DarkPokerColors.secondaryText : '#666' }]}>
                       (${(player.totalBuyIns || 0).toFixed(2)} in)
