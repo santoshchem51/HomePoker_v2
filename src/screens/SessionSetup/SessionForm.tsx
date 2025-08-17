@@ -77,7 +77,7 @@ const VoiceInputButton: React.FC<{
                       { text: 'Cancel', style: 'cancel' },
                       {
                         text: 'OK',
-                        onPress: (text) => {
+                        onPress: (text?: string) => {
                           if (text && text.trim()) {
                             onVoiceInput(text.trim());
                           }
@@ -115,7 +115,7 @@ const VoiceInputButton: React.FC<{
                     { text: 'Cancel', style: 'cancel' },
                     {
                       text: 'OK',
-                      onPress: (text) => {
+                      onPress: (text?: string) => {
                         if (text && text.trim()) {
                           onVoiceInput(text.trim());
                         }

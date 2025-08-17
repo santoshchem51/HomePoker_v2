@@ -11,11 +11,16 @@ import {
 import { SessionService } from '../../services/core/SessionService';
 import { ExportService } from '../../services/infrastructure/ExportService';
 import { NotificationService } from '../../services/infrastructure/NotificationService';
+import { TransactionService } from '../../services/core/TransactionService';
+import { DatabaseService } from '../../services/infrastructure/DatabaseService';
 import { Session } from '../../types/session';
+import { useTheme } from '../../contexts/ThemeContext';
+import { DarkPokerColors } from '../../styles/darkTheme.styles';
 
 interface SessionHistoryProps {
   onSessionSelect?: (sessionId: string) => void;
   onExportComplete?: (sessionId: string, format: string) => void;
+  onViewSettlement?: (sessionId: string) => void;
 }
 
 interface HistorySession extends Session {
@@ -25,8 +30,10 @@ interface HistorySession extends Session {
 
 export const SessionHistory: React.FC<SessionHistoryProps> = ({
   onSessionSelect,
-  onExportComplete
+  onExportComplete,
+  onViewSettlement
 }) => {
+  const { isDarkMode } = useTheme();
   const [sessions, setSessions] = useState<HistorySession[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -35,12 +42,36 @@ export const SessionHistory: React.FC<SessionHistoryProps> = ({
   const sessionService = SessionService.getInstance();
   const exportService = ExportService.getInstance();
   const notificationService = NotificationService.getInstance();
+  const transactionService = TransactionService.getInstance();
+  const dbService = DatabaseService.getInstance();
 
   const loadSessions = useCallback(async () => {
     try {
       setLoading(true);
       const historyData = await sessionService.getSessionHistory(30);
-      setSessions(historyData);
+      
+      // Calculate actual total pot for each session from transactions
+      const sessionsWithCalculatedPot = await Promise.all(
+        historyData.map(async (session) => {
+          try {
+            // Get all buy-in transactions for this session
+            const transactions = await dbService.getTransactions(session.id);
+            const buyInTransactions = transactions.filter((t: any) => t.type === 'buyIn' && !t.isVoid);
+            const totalPot = buyInTransactions.reduce((sum: number, transaction: any) => sum + transaction.amount, 0);
+            
+            console.log(`Session ${session.name}: calculated totalPot = ${totalPot} from ${buyInTransactions.length} buy-ins`);
+            return {
+              ...session,
+              totalPot: totalPot
+            };
+          } catch (error) {
+            console.warn(`Failed to calculate total pot for session ${session.id}:`, error);
+            return session; // Return original session if calculation fails
+          }
+        })
+      );
+      
+      setSessions(sessionsWithCalculatedPot);
     } catch (error) {
       console.error('Failed to load session history:', error);
       const errorMessage = error instanceof Error ? error.message : 'Failed to load session history';
@@ -48,7 +79,7 @@ export const SessionHistory: React.FC<SessionHistoryProps> = ({
     } finally {
       setLoading(false);
     }
-  }, [sessionService]);
+  }, [sessionService, transactionService]);
 
   useEffect(() => {
     loadSessions();
@@ -88,17 +119,17 @@ export const SessionHistory: React.FC<SessionHistoryProps> = ({
     }
   };
 
-  const handleExportSession = (session: HistorySession) => {
-    Alert.alert(
-      'Export Session',
-      'Choose export format:',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'JSON', onPress: () => exportSession(session.id, 'json') },
-        { text: 'CSV', onPress: () => exportSession(session.id, 'csv') },
-        { text: 'WhatsApp', onPress: () => exportSession(session.id, 'whatsapp') }
-      ]
-    );
+  const handleViewSettlement = (session: HistorySession) => {
+    if (onViewSettlement) {
+      onViewSettlement(session.id);
+    } else {
+      // Fallback - show basic settlement info
+      Alert.alert(
+        'Settlement Statement',
+        `Session: ${session.name}\nTotal Pot: ${formatCurrency(session.totalPot)}\nPlayers: ${session.playerCount}\nCompleted: ${session.completedAt ? formatDate(session.completedAt.toString()) : 'In Progress'}`,
+        [{ text: 'OK' }]
+      );
+    }
   };
 
   const exportSession = async (sessionId: string, format: 'json' | 'csv' | 'whatsapp') => {
@@ -136,11 +167,14 @@ export const SessionHistory: React.FC<SessionHistoryProps> = ({
   const formatCurrency = (amount: number | undefined | null) => {
     // Handle all falsy values and non-numbers
     if (amount === undefined || amount === null || isNaN(amount) || typeof amount !== 'number') {
+      console.log('formatCurrency: Invalid amount:', amount);
       return '$0.00';
     }
     // Ensure the number is valid before calling toFixed
     try {
-      return `$${Number(amount).toFixed(2)}`;
+      const formatted = `$${Number(amount).toFixed(2)}`;
+      console.log('formatCurrency: Formatting', amount, 'as', formatted);
+      return formatted;
     } catch (error) {
       console.warn('Error formatting currency:', amount, error);
       return '$0.00';
@@ -169,15 +203,26 @@ export const SessionHistory: React.FC<SessionHistoryProps> = ({
     const isExporting = exporting === item.id;
     const cleanupTime = getTimeUntilCleanup(item.cleanupAt);
     
+    const cardStyle = [
+      styles.sessionCard,
+      { backgroundColor: isDarkMode ? DarkPokerColors.cardBackground : 'white' }
+    ];
+    
     return (
-      <View style={styles.sessionCard}>
+      <View style={cardStyle}>
         <TouchableOpacity 
           style={styles.sessionHeader}
           onPress={() => handleSessionPress(item.id)}
         >
           <View style={styles.sessionInfo}>
-            <Text style={styles.sessionName}>{item.name}</Text>
-            <Text style={styles.sessionDate}>
+            <Text style={[
+              styles.sessionName,
+              { color: isDarkMode ? DarkPokerColors.primaryText : '#333' }
+            ]}>{item.name}</Text>
+            <Text style={[
+              styles.sessionDate,
+              { color: isDarkMode ? DarkPokerColors.secondaryText : '#666' }
+            ]}>
               {item.completedAt ? formatDate(item.completedAt.toString()) : 'In Progress'}
             </Text>
             {cleanupTime && (
@@ -191,23 +236,40 @@ export const SessionHistory: React.FC<SessionHistoryProps> = ({
           </View>
           
           <View style={styles.sessionStats}>
-            <Text style={styles.potAmount}>{formatCurrency(item.totalPot)}</Text>
-            <Text style={styles.playerCount}>{item.playerCount} players</Text>
+            <Text style={[
+              styles.potAmount,
+              { color: isDarkMode ? DarkPokerColors.success : '#34c759' }
+            ]}>{formatCurrency(item.totalPot)}</Text>
+            <Text style={[
+              styles.playerCount,
+              { color: isDarkMode ? DarkPokerColors.secondaryText : '#666' }
+            ]}>{item.playerCount} players</Text>
             {item.has_export && (
               <Text style={styles.exportStatus}>✓ Exported</Text>
             )}
           </View>
         </TouchableOpacity>
         
-        <View style={styles.actionBar}>
+        <View style={[
+          styles.actionBar,
+          { 
+            borderTopColor: isDarkMode ? DarkPokerColors.border : '#f0f0f0',
+            backgroundColor: isDarkMode ? DarkPokerColors.cardBackground : 'white'
+          }
+        ]}>
           <TouchableOpacity
-            style={[styles.actionButton, styles.exportButton]}
-            onPress={() => handleExportSession(item)}
+            style={[
+              styles.actionButton, 
+              styles.exportButton,
+              { borderRightColor: isDarkMode ? DarkPokerColors.border : '#f0f0f0' }
+            ]}
+            onPress={() => handleViewSettlement(item)}
             disabled={isExporting}
           >
-            <Text style={styles.exportButtonText}>
-              {isExporting ? 'Exporting...' : 'Export'}
-            </Text>
+            <Text style={[
+              styles.exportButtonText,
+              { color: isDarkMode ? DarkPokerColors.selected : '#007aff' }
+            ]}>View Settlement</Text>
           </TouchableOpacity>
           
           <TouchableOpacity
@@ -215,7 +277,10 @@ export const SessionHistory: React.FC<SessionHistoryProps> = ({
             onPress={() => handleDeleteSession(item)}
             disabled={isExporting}
           >
-            <Text style={styles.deleteButtonText}>Delete</Text>
+            <Text style={[
+              styles.deleteButtonText,
+              { color: isDarkMode ? DarkPokerColors.error : '#ff3b30' }
+            ]}>Delete</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -224,17 +289,32 @@ export const SessionHistory: React.FC<SessionHistoryProps> = ({
 
   if (loading && !refreshing) {
     return (
-      <View style={styles.centerContainer}>
-        <Text style={styles.loadingText}>Loading session history...</Text>
+      <View style={[
+        styles.centerContainer,
+        { backgroundColor: isDarkMode ? DarkPokerColors.background : '#f5f5f5' }
+      ]}>
+        <Text style={[
+          styles.loadingText,
+          { color: isDarkMode ? DarkPokerColors.secondaryText : '#666' }
+        ]}>Loading session history...</Text>
       </View>
     );
   }
 
   if (sessions.length === 0) {
     return (
-      <View style={styles.centerContainer}>
-        <Text style={styles.emptyText}>No completed sessions found</Text>
-        <Text style={styles.emptySubtext}>
+      <View style={[
+        styles.centerContainer,
+        { backgroundColor: isDarkMode ? DarkPokerColors.background : '#f5f5f5' }
+      ]}>
+        <Text style={[
+          styles.emptyText,
+          { color: isDarkMode ? DarkPokerColors.primaryText : '#333' }
+        ]}>No completed sessions found</Text>
+        <Text style={[
+          styles.emptySubtext,
+          { color: isDarkMode ? DarkPokerColors.secondaryText : '#666' }
+        ]}>
           Completed sessions will appear here for 30 days
         </Text>
       </View>
@@ -242,7 +322,10 @@ export const SessionHistory: React.FC<SessionHistoryProps> = ({
   }
 
   return (
-    <View style={styles.container}>
+    <View style={[
+      styles.container,
+      { backgroundColor: isDarkMode ? DarkPokerColors.background : '#f5f5f5' }
+    ]}>
       <FlatList
         data={sessions}
         renderItem={renderSession}
@@ -260,7 +343,7 @@ export const SessionHistory: React.FC<SessionHistoryProps> = ({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+    // backgroundColor removed - will be set dynamically
   },
   listContainer: {
     padding: 16,

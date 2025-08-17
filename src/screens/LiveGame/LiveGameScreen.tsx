@@ -19,11 +19,14 @@ import {
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { RootStackParamList } from '../../navigation/AppNavigator';
-import { TransactionForm } from './TransactionForm';
 import { useSessionStore } from '../../stores/sessionStore';
 import { useMemoryManagement } from '../../hooks/useMemoryManagement';
 import { useTheme } from '../../contexts/ThemeContext';
 import { DarkPokerColors } from '../../styles/darkTheme.styles';
+import { AmountInputModal } from '../../components/common/AmountInputModal';
+import { PlayerActionButtons } from '../../components/poker/PlayerActionButtons';
+import { ServiceError, ErrorCode } from '../../types/errors';
+import { Player } from '../../types/player';
 
 type LiveGameScreenNavigationProp = StackNavigationProp<RootStackParamList, 'LiveGame'>;
 type LiveGameScreenRouteProp = RouteProp<RootStackParamList, 'LiveGame'>;
@@ -41,8 +44,23 @@ const LiveGameScreenComponent: React.FC = () => {
     cleanupDelay: 5000
   });
 
-  // Basic loading state
+  // Modal state for transaction input
+  const [modalState, setModalState] = useState<{
+    visible: boolean;
+    transactionType: 'buy_in' | 'cash_out' | null;
+    selectedPlayer: Player | null;
+  }>({
+    visible: false,
+    transactionType: null,
+    selectedPlayer: null
+  });
+  
+  // Transaction loading state
   const [transactionLoading, setTransactionLoading] = useState(false);
+  
+  // Organizer confirmation state
+  const [showOrganizerConfirmation, setShowOrganizerConfirmation] = useState(false);
+  const [pendingCashOut, setPendingCashOut] = useState<{ player: Player; amount: number } | null>(null);
 
   // Store hooks - only basic session management
   const {
@@ -60,30 +78,123 @@ const LiveGameScreenComponent: React.FC = () => {
     }
   }, [sessionId, loadSessionState]);
 
-  // Epic 1: Basic transaction handlers with memory management
-  const handleBuyIn = useCallback(async (playerId: string, amount: number): Promise<void> => {
-    setTransactionLoading(true);
-    try {
-      await recordBuyIn(sessionId, playerId, amount);
-    } catch (error) {
-      Alert.alert('Transaction Error', 'Failed to record buy-in. Please try again.');
-      throw error;
-    } finally {
-      setTransactionLoading(false);
+  // Player action button handlers
+  const handleBuyInPress = useCallback((playerId: string) => {
+    const player = players.find(p => p.id === playerId);
+    if (player) {
+      setModalState({
+        visible: true,
+        transactionType: 'buy_in',
+        selectedPlayer: player
+      });
     }
-  }, [sessionId, recordBuyIn]);
+  }, [players]);
 
-  const handleCashOut = useCallback(async (playerId: string, amount: number, organizerConfirmed?: boolean): Promise<void> => {
+  const handleCashOutPress = useCallback((playerId: string) => {
+    const player = players.find(p => p.id === playerId);
+    if (player) {
+      setModalState({
+        visible: true,
+        transactionType: 'cash_out',
+        selectedPlayer: player
+      });
+    }
+  }, [players]);
+
+  // Modal handlers
+  const handleModalCancel = useCallback(() => {
+    setModalState({
+      visible: false,
+      transactionType: null,
+      selectedPlayer: null
+    });
+  }, []);
+
+  const handleModalSubmit = useCallback(async (amount: number): Promise<void> => {
+    if (!modalState.selectedPlayer || !modalState.transactionType) {
+      return;
+    }
+
     setTransactionLoading(true);
+    
     try {
-      await recordCashOut(sessionId, playerId, amount, organizerConfirmed);
+      if (modalState.transactionType === 'buy_in') {
+        await recordBuyIn(sessionId, modalState.selectedPlayer.id, amount);
+        
+        Alert.alert(
+          'Success',
+          `Buy-in of $${amount.toFixed(2)} recorded for ${modalState.selectedPlayer.name}!`,
+          [{ text: 'OK' }]
+        );
+      } else {
+        await recordCashOut(sessionId, modalState.selectedPlayer.id, amount);
+        
+        Alert.alert(
+          'Success',
+          `Cash-out of $${amount.toFixed(2)} recorded for ${modalState.selectedPlayer.name}!`,
+          [{ text: 'OK' }]
+        );
+      }
+      
+      // Close modal on success
+      handleModalCancel();
+      
     } catch (error) {
-      Alert.alert('Transaction Error', 'Failed to record cash-out. Please try again.');
+      console.error('Transaction submission failed:', error);
+      
+      // Handle organizer confirmation requirement
+      if (error instanceof ServiceError && error.code === ErrorCode.ORGANIZER_CONFIRMATION_REQUIRED) {
+        setPendingCashOut({ player: modalState.selectedPlayer, amount });
+        setShowOrganizerConfirmation(true);
+        handleModalCancel(); // Close amount modal
+        return;
+      }
+      
+      Alert.alert(
+        'Error',
+        error instanceof ServiceError ? error.message : `Failed to record ${modalState.transactionType.replace('_', '-')}. Please try again.`,
+        [{ text: 'OK' }]
+      );
       throw error;
     } finally {
       setTransactionLoading(false);
     }
-  }, [sessionId, recordCashOut]);
+  }, [modalState, sessionId, recordBuyIn, recordCashOut, handleModalCancel]);
+
+  // Organizer confirmation handlers
+  const handleOrganizerConfirmation = useCallback(async (confirmed: boolean) => {
+    setShowOrganizerConfirmation(false);
+    
+    if (!confirmed || !pendingCashOut) {
+      setPendingCashOut(null);
+      return;
+    }
+
+    setTransactionLoading(true);
+    
+    try {
+      await recordCashOut(sessionId, pendingCashOut.player.id, pendingCashOut.amount, true);
+      
+      Alert.alert(
+        'Success',
+        `Cash-out of $${pendingCashOut.amount.toFixed(2)} recorded for ${pendingCashOut.player.name} with organizer approval!`,
+        [{ text: 'OK' }]
+      );
+      
+      setPendingCashOut(null);
+      
+    } catch (error) {
+      console.error('Confirmed cash-out submission failed:', error);
+      Alert.alert(
+        'Error',
+        error instanceof ServiceError ? error.message : 'Failed to record cash-out. Please try again.',
+        [{ text: 'OK' }]
+      );
+      setPendingCashOut(null);
+    } finally {
+      setTransactionLoading(false);
+    }
+  }, [pendingCashOut, sessionId, recordCashOut]);
 
   const handleEndSession = useCallback(async () => {
     try {
@@ -129,6 +240,13 @@ const LiveGameScreenComponent: React.FC = () => {
   useEffect(() => {
     addCleanup(() => {
       setTransactionLoading(false);
+      setModalState({
+        visible: false,
+        transactionType: null,
+        selectedPlayer: null
+      });
+      setShowOrganizerConfirmation(false);
+      setPendingCashOut(null);
     });
   }, [addCleanup]);
 
@@ -189,13 +307,19 @@ const LiveGameScreenComponent: React.FC = () => {
                     </Text>
                   </View>
                 </View>
-                <View style={styles.playerStatus}>
+                <View style={styles.playerActions}>
                   <Text style={[
                     styles.statusText, 
                     player.status === 'active' ? styles.statusActive : styles.statusCashedOut
                   ]}>
                     {player.status === 'active' ? '●' : '○'}
                   </Text>
+                  <PlayerActionButtons
+                    player={player}
+                    onBuyInPress={handleBuyInPress}
+                    onCashOutPress={handleCashOutPress}
+                    disabled={transactionLoading}
+                  />
                 </View>
               </View>
             ))
@@ -204,14 +328,6 @@ const LiveGameScreenComponent: React.FC = () => {
           )}
         </View>
 
-        {/* Transaction Form - Epic 1 core functionality */}
-        <TransactionForm
-          sessionId={sessionId}
-          players={players}
-          onSubmitBuyIn={handleBuyIn}
-          onSubmitCashOut={handleCashOut}
-          loading={transactionLoading}
-        />
 
         {/* Action Buttons - Basic session management */}
         <View style={styles.actionButtons}>
@@ -230,6 +346,44 @@ const LiveGameScreenComponent: React.FC = () => {
           </TouchableOpacity>
         </View>
       </ScrollView>
+      
+      {/* Amount Input Modal */}
+      <AmountInputModal
+        visible={modalState.visible}
+        transactionType={modalState.transactionType || 'buy_in'}
+        playerName={modalState.selectedPlayer?.name || ''}
+        currentBalance={modalState.selectedPlayer?.currentBalance || 0}
+        onSubmit={handleModalSubmit}
+        onCancel={handleModalCancel}
+        loading={transactionLoading}
+      />
+      
+      {/* Organizer Confirmation Modal */}
+      {showOrganizerConfirmation && pendingCashOut && (
+        <View style={[styles.organizerModalOverlay, { backgroundColor: isDarkMode ? DarkPokerColors.overlay : 'rgba(0, 0, 0, 0.5)' }]}>
+          <View style={[styles.organizerModalContainer, { backgroundColor: isDarkMode ? DarkPokerColors.modalBackground : '#FFFFFF' }]}>
+            <Text style={[styles.organizerModalTitle, { color: isDarkMode ? DarkPokerColors.primaryText : '#2C3E50' }]}>Organizer Confirmation Required</Text>
+            <Text style={[styles.organizerModalMessage, { color: isDarkMode ? DarkPokerColors.secondaryText : '#34495E' }]}>
+              Cash-out amount ${pendingCashOut.amount.toFixed(2)} exceeds {pendingCashOut.player.name}'s total buy-ins. 
+              Do you want to proceed as the organizer?
+            </Text>
+            <View style={styles.organizerModalButtons}>
+              <TouchableOpacity
+                style={[styles.organizerModalButton, styles.organizerModalButtonCancel]}
+                onPress={() => handleOrganizerConfirmation(false)}
+              >
+                <Text style={styles.organizerModalButtonText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.organizerModalButton, styles.organizerModalButtonConfirm]}
+                onPress={() => handleOrganizerConfirmation(true)}
+              >
+                <Text style={styles.organizerModalButtonText}>Confirm</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      )}
     </View>
   );
 };
@@ -321,10 +475,10 @@ const styles = StyleSheet.create({
     color: '#666',
   },
   
-  playerStatus: {
-    marginLeft: 8,
-    minWidth: 20,
+  playerActions: {
+    flexDirection: 'row',
     alignItems: 'center',
+    gap: 8,
   },
   
   statusText: {
@@ -423,6 +577,65 @@ const styles = StyleSheet.create({
   loadingText: {
     fontSize: 16,
     color: '#666',
+  },
+  
+  // Organizer confirmation modal styles
+  organizerModalOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  organizerModalContainer: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    padding: 24,
+    margin: 20,
+    maxWidth: 400,
+    width: '90%',
+  },
+  organizerModalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#2C3E50',
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+  organizerModalMessage: {
+    fontSize: 16,
+    color: '#34495E',
+    marginBottom: 24,
+    lineHeight: 22,
+    textAlign: 'center',
+  },
+  organizerModalButtons: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  organizerModalButton: {
+    flex: 1,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    alignItems: 'center',
+    minHeight: 48,
+    justifyContent: 'center',
+  },
+  organizerModalButtonCancel: {
+    backgroundColor: '#95A5A6',
+  },
+  organizerModalButtonConfirm: {
+    backgroundColor: '#E67E22',
+  },
+  organizerModalButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
   },
 });
 
