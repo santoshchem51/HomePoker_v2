@@ -2,28 +2,181 @@
  * SessionForm - Form component for session creation with validation
  * Handles input validation for session name and organizer information
  */
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
   TextInput,
   TouchableOpacity,
   StyleSheet,
-  ActivityIndicator
+  ActivityIndicator,
+  Alert
 } from 'react-native';
+import { useTheme } from '../../contexts/ThemeContext';
+import { DarkPokerColors } from '../../styles/darkTheme.styles';
+import { RealVoiceService } from '../../services/integration/RealVoiceService';
 
 export interface SessionFormProps {
   onSubmit: (sessionName: string, organizerId: string) => Promise<void>;
   loading: boolean;
 }
 
+// Voice Input Button Component (WhatsApp style) with Real Speech Recognition
+const VoiceInputButton: React.FC<{
+  onVoiceInput: (text: string) => void;
+  isDarkMode: boolean;
+  disabled?: boolean;
+}> = ({ onVoiceInput, isDarkMode, disabled }) => {
+  const [isRecording, setIsRecording] = useState(false);
+  const voiceService = RealVoiceService.getInstance();
+
+  const handleVoicePress = async () => {
+    if (disabled) return;
+
+    if (isRecording) {
+      // Stop recording
+      await voiceService.stopListening();
+      setIsRecording(false);
+    } else {
+      // Start recording with real voice recognition
+      const started = await voiceService.startListening({
+        onStart: () => {
+          setIsRecording(true);
+          console.log('Voice recording started');
+        },
+        onResult: (result) => {
+          console.log('Voice recognition result:', result);
+          if (result.text && result.text.trim()) {
+            onVoiceInput(result.text.trim());
+            Alert.alert(
+              'Voice Input Complete',
+              `Recognized: "${result.text}"`,
+              [{ text: 'OK' }]
+            );
+          }
+          setIsRecording(false);
+        },
+        onError: (error) => {
+          console.error('Voice recognition error:', error);
+          setIsRecording(false);
+          
+          // Fallback to manual input on error
+          Alert.alert(
+            'Voice Recognition Error',
+            `${error}\n\nWould you like to enter text manually?`,
+            [
+              { text: 'Cancel', style: 'cancel' },
+              {
+                text: 'Yes, Type Manually',
+                onPress: () => {
+                  // Fallback to manual input
+                  Alert.prompt(
+                    'Enter Text',
+                    'Please enter the text manually:',
+                    [
+                      { text: 'Cancel', style: 'cancel' },
+                      {
+                        text: 'OK',
+                        onPress: (text) => {
+                          if (text && text.trim()) {
+                            onVoiceInput(text.trim());
+                          }
+                        }
+                      }
+                    ],
+                    'plain-text'
+                  );
+                }
+              }
+            ]
+          );
+        },
+        onEnd: () => {
+          setIsRecording(false);
+          console.log('Voice recording ended');
+        }
+      });
+
+      if (!started) {
+        setIsRecording(false);
+        // Voice not available, fallback to manual
+        Alert.alert(
+          'Voice Not Available',
+          'Voice recognition is not available. Please enter text manually.',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            {
+              text: 'Enter Manually',
+              onPress: () => {
+                Alert.prompt(
+                  'Enter Text',
+                  'Please enter the text:',
+                  [
+                    { text: 'Cancel', style: 'cancel' },
+                    {
+                      text: 'OK',
+                      onPress: (text) => {
+                        if (text && text.trim()) {
+                          onVoiceInput(text.trim());
+                        }
+                      }
+                    }
+                  ],
+                  'plain-text'
+                );
+              }
+            }
+          ]
+        );
+      }
+    }
+  };
+
+  return (
+    <TouchableOpacity
+      style={[
+        styles.voiceButton,
+        {
+          backgroundColor: isRecording 
+            ? (isDarkMode ? DarkPokerColors.error : '#ff4444')
+            : (isDarkMode ? DarkPokerColors.buttonSecondary : '#f0f0f0'),
+          borderColor: isDarkMode ? DarkPokerColors.border : '#ddd',
+        },
+        disabled && styles.voiceButtonDisabled
+      ]}
+      onPress={handleVoicePress}
+      disabled={disabled}
+    >
+      <Text style={[
+        styles.voiceButtonText,
+        {
+          color: isRecording 
+            ? '#fff'
+            : (isDarkMode ? DarkPokerColors.primaryText : '#666')
+        }
+      ]}>
+        {isRecording ? '⏹️' : '🎤'}
+      </Text>
+    </TouchableOpacity>
+  );
+};
+
 export const SessionForm: React.FC<SessionFormProps> = ({ onSubmit, loading }) => {
+  const { isDarkMode } = useTheme();
   const [sessionName, setSessionName] = useState('');
   const [organizerId, setOrganizerId] = useState('');
   const [errors, setErrors] = useState<{
     sessionName?: string;
     organizerId?: string;
   }>({});
+
+  // Cleanup voice service on unmount
+  useEffect(() => {
+    return () => {
+      const voiceService = RealVoiceService.getInstance();
+      voiceService.cleanup();
+    };
+  }, []);
 
   /**
    * Validate form inputs
@@ -82,55 +235,120 @@ export const SessionForm: React.FC<SessionFormProps> = ({ onSubmit, loading }) =
     }
   };
 
+  /**
+   * Handle voice input for session name
+   */
+  const handleSessionNameVoice = (text: string) => {
+    setSessionName(text);
+    clearError('sessionName');
+  };
+
+  /**
+   * Handle voice input for organizer ID
+   */
+  const handleOrganizerIdVoice = (text: string) => {
+    setOrganizerId(text);
+    clearError('organizerId');
+  };
+
   return (
-    <View style={styles.container}>
-      <Text style={styles.subtitle}>Session Details</Text>
+    <View style={[
+      styles.container,
+      { backgroundColor: isDarkMode ? DarkPokerColors.cardBackground : 'white' }
+    ]}>
+      <Text style={[
+        styles.subtitle,
+        { color: isDarkMode ? DarkPokerColors.primaryText : '#333' }
+      ]}>Session Details</Text>
 
       {/* Session Name Input */}
       <View style={styles.inputContainer}>
-        <Text style={styles.label}>Session Name *</Text>
-        <TextInput
-          style={[
-            styles.input,
-            errors.sessionName ? styles.inputError : null
-          ]}
-          value={sessionName}
-          onChangeText={(text) => {
-            setSessionName(text);
-            clearError('sessionName');
-          }}
-          placeholder="e.g., Friday Night Poker"
-          maxLength={50}
-          editable={!loading}
-          testID="session-name-input"
-        />
+        <Text style={[
+          styles.label,
+          { color: isDarkMode ? DarkPokerColors.primaryText : '#333' }
+        ]}>Session Name *</Text>
+        <View style={styles.inputRow}>
+          <TextInput
+            style={[
+              styles.input,
+              styles.inputWithVoice,
+              {
+                backgroundColor: isDarkMode ? DarkPokerColors.background : '#f9f9f9',
+                color: isDarkMode ? DarkPokerColors.primaryText : '#333',
+                borderColor: isDarkMode ? DarkPokerColors.border : '#ddd',
+              },
+              errors.sessionName ? styles.inputError : null
+            ]}
+            value={sessionName}
+            onChangeText={(text) => {
+              setSessionName(text);
+              clearError('sessionName');
+            }}
+            placeholder="e.g., Friday Night Poker"
+            placeholderTextColor={isDarkMode ? DarkPokerColors.placeholderText : '#999'}
+            maxLength={50}
+            editable={!loading}
+            testID="session-name-input"
+          />
+          <VoiceInputButton
+            onVoiceInput={handleSessionNameVoice}
+            isDarkMode={isDarkMode}
+            disabled={loading}
+          />
+        </View>
         {errors.sessionName && (
-          <Text style={styles.errorText}>{errors.sessionName}</Text>
+          <Text style={[
+            styles.errorText,
+            { color: isDarkMode ? DarkPokerColors.error : '#cc0000' }
+          ]}>{errors.sessionName}</Text>
         )}
-        <Text style={styles.helperText}>
+        <Text style={[
+          styles.helperText,
+          { color: isDarkMode ? DarkPokerColors.secondaryText : '#666' }
+        ]}>
           {sessionName.length}/50 characters
         </Text>
       </View>
 
       {/* Organizer ID Input */}
       <View style={styles.inputContainer}>
-        <Text style={styles.label}>Organizer Name *</Text>
-        <TextInput
-          style={[
-            styles.input,
-            errors.organizerId ? styles.inputError : null
-          ]}
-          value={organizerId}
-          onChangeText={(text) => {
-            setOrganizerId(text);
-            clearError('organizerId');
-          }}
-          placeholder="Your name"
-          editable={!loading}
-          testID="organizer-id-input"
-        />
+        <Text style={[
+          styles.label,
+          { color: isDarkMode ? DarkPokerColors.primaryText : '#333' }
+        ]}>Organizer Name *</Text>
+        <View style={styles.inputRow}>
+          <TextInput
+            style={[
+              styles.input,
+              styles.inputWithVoice,
+              {
+                backgroundColor: isDarkMode ? DarkPokerColors.background : '#f9f9f9',
+                color: isDarkMode ? DarkPokerColors.primaryText : '#333',
+                borderColor: isDarkMode ? DarkPokerColors.border : '#ddd',
+              },
+              errors.organizerId ? styles.inputError : null
+            ]}
+            value={organizerId}
+            onChangeText={(text) => {
+              setOrganizerId(text);
+              clearError('organizerId');
+            }}
+            placeholder="Your name"
+            placeholderTextColor={isDarkMode ? DarkPokerColors.placeholderText : '#999'}
+            editable={!loading}
+            testID="organizer-id-input"
+          />
+          <VoiceInputButton
+            onVoiceInput={handleOrganizerIdVoice}
+            isDarkMode={isDarkMode}
+            disabled={loading}
+          />
+        </View>
         {errors.organizerId && (
-          <Text style={styles.errorText}>{errors.organizerId}</Text>
+          <Text style={[
+            styles.errorText,
+            { color: isDarkMode ? DarkPokerColors.error : '#cc0000' }
+          ]}>{errors.organizerId}</Text>
         )}
       </View>
 
@@ -138,7 +356,9 @@ export const SessionForm: React.FC<SessionFormProps> = ({ onSubmit, loading }) =
       <TouchableOpacity
         style={[
           styles.submitButton,
-          loading ? styles.submitButtonDisabled : styles.submitButtonEnabled
+          loading ? styles.submitButtonDisabled : {
+            backgroundColor: isDarkMode ? DarkPokerColors.buttonPrimary : '#2196F3'
+          }
         ]}
         onPress={handleSubmit}
         disabled={loading}
@@ -147,11 +367,17 @@ export const SessionForm: React.FC<SessionFormProps> = ({ onSubmit, loading }) =
         {loading ? (
           <ActivityIndicator size="small" color="white" />
         ) : (
-          <Text style={styles.submitButtonText}>Create Session</Text>
+          <Text style={[
+            styles.submitButtonText,
+            { color: isDarkMode ? DarkPokerColors.buttonText : 'white' }
+          ]}>Create Session</Text>
         )}
       </TouchableOpacity>
 
-      <Text style={styles.requiredNote}>* Required fields</Text>
+      <Text style={[
+        styles.requiredNote,
+        { color: isDarkMode ? DarkPokerColors.secondaryText : '#666' }
+      ]}>* Required fields</Text>
     </View>
   );
 };
@@ -183,6 +409,11 @@ const styles = StyleSheet.create({
     color: '#333',
     marginBottom: 8,
   },
+  inputRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+  },
   input: {
     borderWidth: 1,
     borderColor: '#ddd',
@@ -191,9 +422,31 @@ const styles = StyleSheet.create({
     fontSize: 16,
     backgroundColor: '#f9f9f9',
   },
+  inputWithVoice: {
+    flex: 1, // Take up remaining space in the row
+  },
   inputError: {
     borderColor: '#ff4444',
     backgroundColor: '#ffe6e6',
+  },
+  voiceButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: '#ddd',
+    backgroundColor: '#f0f0f0',
+    alignItems: 'center',
+    justifyContent: 'center',
+    alignSelf: 'flex-start',
+    marginTop: 1, // Slight adjustment to align with text input
+  },
+  voiceButtonDisabled: {
+    opacity: 0.5,
+  },
+  voiceButtonText: {
+    fontSize: 18,
+    textAlign: 'center',
   },
   errorText: {
     color: '#cc0000',
