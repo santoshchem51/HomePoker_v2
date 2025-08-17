@@ -156,7 +156,7 @@ To the maximum extent permitted by law:
 - Many issues can be resolved through communication
 
 ### Governing Law
-- These Terms are governed by [TO BE SPECIFIED - Local Jurisdiction]
+- These Terms are governed by the laws of Ohio, United States
 - Any disputes will be resolved in the appropriate courts
 - You agree to the jurisdiction specified
 
@@ -164,9 +164,9 @@ To the maximum extent permitted by law:
 
 For questions about these Terms of Service:
 
-**Email:** [TO BE ADDED - Developer Email]  
+**Email:** pokepot.help2025@gmail.com  
 **Support:** Available through Google Play Store  
-**Developer:** [TO BE ADDED - Developer Name]
+**Developer:** Santosh Addagatla
 
 ## Severability
 

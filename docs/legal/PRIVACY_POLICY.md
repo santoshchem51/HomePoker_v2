@@ -145,9 +145,9 @@ We may update this Privacy Policy from time to time. We will notify you of any c
 
 If you have questions about this Privacy Policy or our privacy practices, please contact us:
 
-**Email:** [TO BE ADDED - Developer Email]  
+**Email:** pokepot.help2025@gmail.com  
 **App Support:** Available through Google Play Store  
-**Developer:** [TO BE ADDED - Developer Name]
+**Developer:** Santosh Addagatla
 
 ## Your Rights and Choices
 
