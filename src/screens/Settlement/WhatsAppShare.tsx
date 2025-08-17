@@ -259,20 +259,6 @@ export const WhatsAppShare: React.FC<WhatsAppShareProps> = ({
     <View style={[styles.container, { backgroundColor: isDarkMode ? DarkPokerColors.cardBackground : '#fff' }]}>
       <Text style={[styles.title, { color: isDarkMode ? DarkPokerColors.primaryText : '#333' }]}>Share Results</Text>
       
-      {/* Primary WhatsApp Share Button (AC: 1) */}
-      <TouchableOpacity
-        style={[
-          styles.primaryButton, 
-          { backgroundColor: isDarkMode ? DarkPokerColors.buttonPrimary : '#25D366' },
-          isSharing && styles.disabled
-        ]}
-        onPress={handleWhatsAppShare}
-        disabled={isSharing}
-      >
-        <Text style={[styles.primaryButtonText, { color: isDarkMode ? DarkPokerColors.buttonText : '#fff' }]}>
-          {SHARE_BUTTON_TEXT}
-        </Text>
-      </TouchableOpacity>
 
       {/* Preview Button */}
       <TouchableOpacity
@@ -312,15 +298,15 @@ export const WhatsAppShare: React.FC<WhatsAppShareProps> = ({
           </ScrollView>
           <View style={[styles.previewFooter, { backgroundColor: isDarkMode ? DarkPokerColors.cardBackground : '#f8f9fa' }]}>
             <Text style={[styles.previewFooterText, { color: isDarkMode ? DarkPokerColors.secondaryText : '#666' }]}>
-              📱 Tap "Share to WhatsApp" to send this message
+              📱 Use the sharing options below to send this message
             </Text>
           </View>
         </View>
       )}
 
-      {/* Alternative Sharing Options (AC: 7) */}
+      {/* Sharing Options */}
       <View style={styles.alternativeContainer}>
-        <Text style={[styles.alternativeTitle, { color: isDarkMode ? DarkPokerColors.secondaryText : '#666' }]}>Alternative Sharing:</Text>
+        <Text style={[styles.alternativeTitle, { color: isDarkMode ? DarkPokerColors.secondaryText : '#666' }]}>Sharing Options:</Text>
         
         <View style={styles.alternativeButtons}>
           <TouchableOpacity

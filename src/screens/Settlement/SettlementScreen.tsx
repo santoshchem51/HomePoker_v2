@@ -264,7 +264,7 @@ export const SettlementScreen: React.FC = () => {
         </View>
       </View>
 
-      {/* Enhanced WhatsApp Share Component (AC: 1) */}
+      {/* Share Component without WhatsApp button */}
       <WhatsAppShare
         settlement={settlement}
         sessionName={sessionName}
