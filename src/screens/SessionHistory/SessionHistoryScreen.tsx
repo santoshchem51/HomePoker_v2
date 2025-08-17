@@ -24,6 +24,16 @@ export const SessionHistoryScreen: React.FC = () => {
     // Could show a toast notification or update UI state
   };
 
+  const handleViewSettlement = (sessionId: string, sessionName?: string) => {
+    // Navigate to settlement screen with sessionId and sessionName
+    console.log('View settlement for session:', sessionId, sessionName);
+    navigation.navigate('Settlement', { 
+      sessionId, 
+      sessionName: sessionName || 'Session',
+      isSessionEnd: false 
+    });
+  };
+
   const containerStyle = [
     styles.container,
     { backgroundColor: isDarkMode ? DarkPokerColors.background : '#f5f5f5' }
@@ -59,6 +69,7 @@ export const SessionHistoryScreen: React.FC = () => {
       <SessionHistory
         onSessionSelect={handleSessionSelect}
         onExportComplete={handleExportComplete}
+        onViewSettlement={handleViewSettlement}
       />
     </SafeAreaView>
   );

@@ -20,7 +20,7 @@ import { DarkPokerColors } from '../../styles/darkTheme.styles';
 interface SessionHistoryProps {
   onSessionSelect?: (sessionId: string) => void;
   onExportComplete?: (sessionId: string, format: string) => void;
-  onViewSettlement?: (sessionId: string) => void;
+  onViewSettlement?: (sessionId: string, sessionName?: string) => void;
 }
 
 interface HistorySession extends Session {
@@ -56,7 +56,7 @@ export const SessionHistory: React.FC<SessionHistoryProps> = ({
           try {
             // Get all buy-in transactions for this session
             const transactions = await dbService.getTransactions(session.id);
-            const buyInTransactions = transactions.filter((t: any) => t.type === 'buyIn' && !t.isVoid);
+            const buyInTransactions = transactions.filter((t: any) => t.type === 'buy_in' && !t.isVoided);
             const totalPot = buyInTransactions.reduce((sum: number, transaction: any) => sum + transaction.amount, 0);
             
             console.log(`Session ${session.name}: calculated totalPot = ${totalPot} from ${buyInTransactions.length} buy-ins`);
@@ -121,7 +121,7 @@ export const SessionHistory: React.FC<SessionHistoryProps> = ({
 
   const handleViewSettlement = (session: HistorySession) => {
     if (onViewSettlement) {
-      onViewSettlement(session.id);
+      onViewSettlement(session.id, session.name);
     } else {
       // Fallback - show basic settlement info
       Alert.alert(

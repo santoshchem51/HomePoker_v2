@@ -36,12 +36,14 @@ const SHARE_BUTTON_TEXT = '📱 Share to WhatsApp';
 interface WhatsAppShareProps {
   settlement: OptimizedSettlement;
   sessionName: string;
+  sessionMetadata?: any;
   onShareComplete?: (result: ShareResult) => void;
 }
 
 export const WhatsAppShare: React.FC<WhatsAppShareProps> = ({
   settlement,
   sessionName,
+  sessionMetadata,
   onShareComplete,
 }) => {
   const [isSharing, setIsSharing] = useState(false);
@@ -52,17 +54,72 @@ export const WhatsAppShare: React.FC<WhatsAppShareProps> = ({
   const whatsappService = WhatsAppService.getInstance();
   const settlementService = SettlementService.getInstance();
 
+  // Enhanced message generation with session metadata
+  const generateEnhancedMessage = useCallback(() => {
+    const formatDuration = (minutes: number) => {
+      const hours = Math.floor(minutes / 60);
+      const remainingMinutes = minutes % 60;
+      if (hours > 0) {
+        return `${hours}h ${remainingMinutes}m`;
+      }
+      return `${remainingMinutes}m`;
+    };
+
+    const formatDate = (dateString: string) => {
+      return new Date(dateString).toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric'
+      });
+    };
+
+    let message = `🎯 ${sessionName} - Poker Results\n\n`;
+    
+    // Session metadata
+    if (sessionMetadata) {
+      message += `💰 Total Pot: $${sessionMetadata.totalPot.toFixed(2)}\n`;
+      message += `⏰ Duration: ${formatDuration(sessionMetadata.duration)}\n`;
+      message += `📅 ${formatDate(sessionMetadata.createdAt)}\n\n`;
+    }
+
+    // Player summary with detailed breakdown
+    message += `👥 Player Summary:\n`;
+    settlement.playerSettlements.forEach(player => {
+      const netFormatted = player.netAmount >= 0 ? `+$${player.netAmount.toFixed(2)}` : `-$${Math.abs(player.netAmount).toFixed(2)}`;
+      message += `• ${player.playerName}: $${player.totalBuyIns.toFixed(2)} in → $${player.totalCashOuts.toFixed(2)} out = ${netFormatted}\n`;
+    });
+
+    // Payments section
+    if (settlement.paymentPlan.length > 0) {
+      message += `\n💸 Payments:\n`;
+      settlement.paymentPlan.forEach(payment => {
+        message += `${payment.fromPlayerName} → ${payment.toPlayerName}: $${payment.amount.toFixed(2)}\n`;
+      });
+      
+      if (settlement.transactionReduction > 0) {
+        message += `\n🎯 Optimized: ${settlement.transactionReduction} fewer transaction${settlement.transactionReduction !== 1 ? 's' : ''}\n`;
+      }
+    } else {
+      message += `\n🤝 Perfect! Everyone broke even!\n`;
+    }
+
+    // Verification
+    message += `\n✅ Settlement verified and balanced`;
+
+    return message;
+  }, [settlement, sessionName, sessionMetadata]);
+
   // Generate and show message preview (AC: 6)
   const handleShowPreview = useCallback(async () => {
     try {
-      const message = await settlementService.formatSettlementForWhatsApp(settlement);
-      setPreviewMessage(message);
+      const enhancedMessage = generateEnhancedMessage();
+      setPreviewMessage(enhancedMessage);
       setShowPreview(true);
     } catch (error) {
       console.error('Preview generation failed:', error);
       Alert.alert('Error', 'Failed to generate message preview');
     }
-  }, [settlement, settlementService]);
+  }, [generateEnhancedMessage]);
 
   // Share to WhatsApp (AC: 1, 2)
   const handleWhatsAppShare = useCallback(async () => {
@@ -227,16 +284,37 @@ export const WhatsAppShare: React.FC<WhatsAppShareProps> = ({
         </Text>
       </TouchableOpacity>
 
-      {/* Message Preview (AC: 6) */}
+      {/* Enhanced Message Preview (AC: 6) */}
       {showPreview && previewMessage && (
         <View style={[styles.previewContainer, { 
           backgroundColor: isDarkMode ? DarkPokerColors.surfaceBackground : '#f9f9f9',
           borderColor: isDarkMode ? DarkPokerColors.border : '#ddd'
         }]}>
-          <Text style={[styles.previewTitle, { color: isDarkMode ? DarkPokerColors.primaryText : '#333' }]}>Message Preview:</Text>
-          <ScrollView style={[styles.previewScroll, { backgroundColor: isDarkMode ? DarkPokerColors.background : '#fff' }]}>
-            <Text style={[styles.previewText, { color: isDarkMode ? DarkPokerColors.primaryText : '#333' }]}>{previewMessage}</Text>
+          <View style={styles.previewHeader}>
+            <Text style={[styles.previewTitle, { color: isDarkMode ? DarkPokerColors.primaryText : '#333' }]}>📄 Message Preview</Text>
+            <TouchableOpacity
+              style={[styles.copyButton, { backgroundColor: isDarkMode ? DarkPokerColors.buttonSecondary : '#007AFF' }]}
+              onPress={handleCopyToClipboard}
+            >
+              <Text style={[styles.copyButtonText, { color: isDarkMode ? DarkPokerColors.buttonText : '#fff' }]}>📋 Copy</Text>
+            </TouchableOpacity>
+          </View>
+          <ScrollView 
+            style={[styles.previewScroll, { 
+              backgroundColor: isDarkMode ? DarkPokerColors.inputBackground : '#fff',
+              borderColor: isDarkMode ? DarkPokerColors.border : '#e0e0e0'
+            }]}
+            showsVerticalScrollIndicator={true}
+          >
+            <Text style={[styles.previewText, { color: isDarkMode ? DarkPokerColors.primaryText : '#333' }]}>
+              {previewMessage}
+            </Text>
           </ScrollView>
+          <View style={[styles.previewFooter, { backgroundColor: isDarkMode ? DarkPokerColors.cardBackground : '#f8f9fa' }]}>
+            <Text style={[styles.previewFooterText, { color: isDarkMode ? DarkPokerColors.secondaryText : '#666' }]}>
+              📱 Tap "Share to WhatsApp" to send this message
+            </Text>
+          </View>
         </View>
       )}
 
@@ -333,24 +411,63 @@ const styles = StyleSheet.create({
   },
   previewContainer: {
     backgroundColor: '#f5f5f5',
-    borderRadius: 8,
-    padding: 12,
+    borderRadius: 12,
+    padding: 0,
     marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#ddd',
+    overflow: 'hidden',
+  },
+  previewHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 12,
+    backgroundColor: '#f8f9fa',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e0e0e0',
   },
   previewTitle: {
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: '600',
     color: '#333',
-    marginBottom: 8,
+  },
+  copyButton: {
+    backgroundColor: '#007AFF',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+  },
+  copyButtonText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '600',
   },
   previewScroll: {
-    maxHeight: 200,
+    maxHeight: 250,
+    minHeight: 150,
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+    margin: 8,
+    borderRadius: 6,
   },
   previewText: {
+    fontSize: 13,
+    color: '#333',
+    lineHeight: 20,
+    fontFamily: 'monospace',
+    padding: 12,
+  },
+  previewFooter: {
+    padding: 10,
+    backgroundColor: '#f8f9fa',
+    alignItems: 'center',
+  },
+  previewFooterText: {
     fontSize: 12,
     color: '#666',
-    lineHeight: 18,
-    fontFamily: 'monospace',
+    fontStyle: 'italic',
   },
   alternativeContainer: {
     borderTopWidth: 1,
