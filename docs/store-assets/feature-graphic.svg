@@ -1,0 +1,103 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="1024" height="500" viewBox="0 0 1024 500" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background -->
+  <defs>
+    <linearGradient id="bgGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#0f172a;stop-opacity:1" />
+      <stop offset="50%" style="stop-color:#1e293b;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#334155;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="chipGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#059669;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#047857;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="cardGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#f8fafc;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#e2e8f0;stop-opacity:1" />
+    </linearGradient>
+    <radialGradient id="spotlight" cx="30%" cy="50%" r="40%">
+      <stop offset="0%" style="stop-color:#1e293b;stop-opacity:0.8" />
+      <stop offset="100%" style="stop-color:#0f172a;stop-opacity:1" />
+    </radialGradient>
+  </defs>
+  
+  <!-- Background -->
+  <rect width="1024" height="500" fill="url(#bgGradient)"/>
+  <rect width="1024" height="500" fill="url(#spotlight)"/>
+  
+  <!-- Poker table felt texture (subtle pattern) -->
+  <rect x="0" y="0" width="1024" height="500" fill="#065f46" opacity="0.1"/>
+  
+  <!-- Left side - Poker chips -->
+  <g transform="translate(120,100)">
+    <!-- Main chip stack -->
+    <circle cx="0" cy="50" r="60" fill="url(#chipGradient)" stroke="#047857" stroke-width="3"/>
+    <circle cx="0" cy="50" r="35" fill="#064e3b"/>
+    <circle cx="0" cy="50" r="45" fill="none" stroke="#34d399" stroke-width="2" stroke-dasharray="12,6"/>
+    <text x="0" y="60" font-family="Arial, sans-serif" font-size="24" font-weight="bold" text-anchor="middle" fill="#34d399">$</text>
+    
+    <!-- Secondary chips -->
+    <circle cx="-30" cy="120" r="40" fill="#dc2626" stroke="#991b1b" stroke-width="2"/>
+    <circle cx="-30" cy="120" r="25" fill="#7f1d1d"/>
+    <circle cx="30" cy="120" r="40" fill="#2563eb" stroke="#1d4ed8" stroke-width="2"/>
+    <circle cx="30" cy="120" r="25" fill="#1e3a8a"/>
+  </g>
+  
+  <!-- Playing cards scattered -->
+  <g transform="translate(280,80) rotate(-10)">
+    <rect x="0" y="0" width="60" height="85" rx="8" fill="url(#cardGradient)" stroke="#64748b" stroke-width="2"/>
+    <text x="12" y="25" font-family="Arial, sans-serif" font-size="18" font-weight="bold" fill="#1e293b">A</text>
+    <path d="M12,35 C12,35 8,40 8,45 C8,48 10,50 12,50 C14,50 16,48 16,45 C16,40 12,35 12,35 Z" fill="#1e293b"/>
+  </g>
+  
+  <g transform="translate(320,120) rotate(15)">
+    <rect x="0" y="0" width="60" height="85" rx="8" fill="url(#cardGradient)" stroke="#64748b" stroke-width="2"/>
+    <text x="12" y="25" font-family="Arial, sans-serif" font-size="18" font-weight="bold" fill="#dc2626">K</text>
+    <path d="M12,55 C9,52 6,50 6,45 C6,42 8,40 10,42 C11,41 12,41 12,42 C12,41 13,41 14,42 C16,40 18,42 18,45 C18,50 15,52 12,55 Z" fill="#dc2626"/>
+  </g>
+  
+  <!-- Main title and tagline -->
+  <g transform="translate(450,150)">
+    <!-- App icon small version -->
+    <circle cx="0" cy="0" r="40" fill="url(#chipGradient)" stroke="#047857" stroke-width="2"/>
+    <circle cx="0" cy="0" r="25" fill="#064e3b"/>
+    <text x="0" y="8" font-family="Arial, sans-serif" font-size="20" font-weight="bold" text-anchor="middle" fill="#34d399">$</text>
+    
+    <!-- Title -->
+    <text x="60" y="-15" font-family="Arial, sans-serif" font-size="48" font-weight="bold" fill="#f8fafc">PokePot</text>
+    <text x="60" y="25" font-family="Arial, sans-serif" font-size="24" fill="#94a3b8">Poker Session Manager</text>
+  </g>
+  
+  <!-- Feature highlights -->
+  <g transform="translate(450,280)">
+    <!-- Voice commands -->
+    <circle cx="0" cy="0" r="15" fill="#34d399"/>
+    <path d="M-6,-8 L-6,8 L-2,8 L-2,-8 Z M2,-8 L2,8 L6,8 L6,-8 Z" fill="#064e3b"/>
+    <text x="25" y="6" font-family="Arial, sans-serif" font-size="16" fill="#e2e8f0">Voice Commands</text>
+    
+    <!-- Real-time tracking -->
+    <circle cx="200" cy="0" r="15" fill="#3b82f6"/>
+    <rect x="195" y="-5" width="10" height="10" rx="2" fill="#1e3a8a"/>
+    <text x="225" y="6" font-family="Arial, sans-serif" font-size="16" fill="#e2e8f0">Real-time Tracking</text>
+    
+    <!-- Smart calculations -->
+    <circle cx="0" cy="40" r="15" fill="#f59e0b"/>
+    <text x="-4" y="6" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#451a03">∑</text>
+    <text x="25" y="46" font-family="Arial, sans-serif" font-size="16" fill="#e2e8f0">Smart Calculations</text>
+    
+    <!-- Export options -->
+    <circle cx="200" cy="40" r="15" fill="#8b5cf6"/>
+    <path d="M195,35 L195,45 L205,45 L205,35 M200,33 L200,38 M198,36 L200,33 L202,36" stroke="#3730a3" stroke-width="1.5" fill="none"/>
+    <text x="225" y="46" font-family="Arial, sans-serif" font-size="16" fill="#e2e8f0">Export &amp; Share</text>
+  </g>
+  
+  <!-- Bottom tagline -->
+  <text x="512" y="450" font-family="Arial, sans-serif" font-size="20" text-anchor="middle" fill="#64748b">Transform your poker nights with professional session management</text>
+  
+  <!-- Decorative poker chips in background -->
+  <g opacity="0.1">
+    <circle cx="850" cy="100" r="30" fill="#34d399"/>
+    <circle cx="900" cy="400" r="25" fill="#dc2626"/>
+    <circle cx="50" cy="400" r="20" fill="#3b82f6"/>
+  </g>
+</svg>

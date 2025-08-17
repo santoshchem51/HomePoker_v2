@@ -100,7 +100,7 @@ coverage/
 # Project specific
 # Keep documentation and .bmad-core for development agent configuration
 
-# Screenshots and demo files
+# Screenshots and demo files (but allow store assets)
 *.png
 *.jpg
 *.jpeg
@@ -121,6 +121,9 @@ view*.png
 app*.png
 dev*.png
 settings*.png
+
+# Exception: Include store assets for deployment
+!docs/store-assets/**
 
 # Temporary test files
 test-*.js
