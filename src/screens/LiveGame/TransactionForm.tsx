@@ -18,6 +18,8 @@ import { Picker } from '@react-native-picker/picker';
 import { Player } from '../../types/player';
 import { TRANSACTION_LIMITS, TransactionType } from '../../types/transaction';
 import { ServiceError, ErrorCode } from '../../types/errors';
+import { useTheme } from '../../contexts/ThemeContext';
+import { DarkPokerColors } from '../../styles/darkTheme.styles';
 
 export interface TransactionFormProps {
   sessionId: string;
@@ -34,6 +36,7 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
   onSubmitCashOut,
   loading
 }) => {
+  const { isDarkMode } = useTheme();
   const [selectedPlayerId, setSelectedPlayerId] = useState<string>('');
   const [amount, setAmount] = useState<string>('');
   const [transactionType, setTransactionType] = useState<TransactionType>('buy_in');
@@ -247,11 +250,11 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
       style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
-      <View style={styles.form}>
-        <Text style={styles.title}>Record Transaction</Text>
+      <View style={[styles.form, { backgroundColor: isDarkMode ? DarkPokerColors.cardBackground : '#FFFFFF' }]}>
+        <Text style={[styles.title, { color: isDarkMode ? DarkPokerColors.primaryText : '#2C3E50' }]}>Record Transaction</Text>
         
         {/* Transaction Type Toggle */}
-        <View style={styles.typeToggleContainer}>
+        <View style={[styles.typeToggleContainer, { backgroundColor: isDarkMode ? DarkPokerColors.surfaceBackground : '#ECF0F1' }]}>
           <TouchableOpacity
             style={[
               styles.typeToggleButton,
@@ -266,6 +269,7 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
           >
             <Text style={[
               styles.typeToggleText,
+              { color: transactionType === 'buy_in' ? '#FFFFFF' : (isDarkMode ? DarkPokerColors.secondaryText : '#7F8C8D') },
               transactionType === 'buy_in' ? styles.typeToggleTextActive : null
             ]}>
               Buy-in
@@ -285,6 +289,7 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
           >
             <Text style={[
               styles.typeToggleText,
+              { color: transactionType === 'cash_out' ? '#FFFFFF' : (isDarkMode ? DarkPokerColors.secondaryText : '#7F8C8D') },
               transactionType === 'cash_out' ? styles.typeToggleTextActive : null
             ]}>
               Cash-out
@@ -294,10 +299,14 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
         
         {/* Player Selection */}
         <View style={styles.fieldContainer}>
-          <Text style={styles.label}>Player *</Text>
+          <Text style={[styles.label, { color: isDarkMode ? DarkPokerColors.primaryText : '#34495E' }]}>Player *</Text>
           <View style={[
             styles.pickerContainer,
-            errors.player ? styles.inputError : null
+            { 
+              backgroundColor: isDarkMode ? DarkPokerColors.inputBackground : '#F8F9FA',
+              borderColor: isDarkMode ? DarkPokerColors.border : '#BDC3C7'
+            },
+            errors.player ? (isDarkMode ? { borderColor: DarkPokerColors.error, backgroundColor: DarkPokerColors.surfaceBackground } : styles.inputError) : null
           ]}>
             <Picker
               selectedValue={selectedPlayerId}
@@ -307,7 +316,7 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
                   setErrors(prev => ({ ...prev, player: undefined }));
                 }
               }}
-              style={styles.picker}
+              style={[styles.picker, { color: isDarkMode ? DarkPokerColors.primaryText : '#000' }]}
               enabled={!loading}
             >
               <Picker.Item label="Select a player..." value="" />
@@ -321,22 +330,30 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
             </Picker>
           </View>
           {errors.player && (
-            <Text style={styles.errorText}>{errors.player}</Text>
+            <Text style={[styles.errorText, { color: isDarkMode ? DarkPokerColors.error : '#E74C3C' }]}>{errors.player}</Text>
           )}
         </View>
 
         {/* Amount Input */}
         <View style={styles.fieldContainer}>
-          <Text style={styles.label}>
+          <Text style={[styles.label, { color: isDarkMode ? DarkPokerColors.primaryText : '#34495E' }]}>
             Amount * (${currentLimits.min} - ${currentLimits.max})
           </Text>
-          <View style={styles.amountInputContainer}>
-            <Text style={styles.currencySymbol}>$</Text>
+          <View style={[
+            styles.amountInputContainer,
+            {
+              backgroundColor: isDarkMode ? DarkPokerColors.inputBackground : '#F8F9FA',
+              borderColor: isDarkMode ? DarkPokerColors.border : '#BDC3C7'
+            },
+            errors.amount ? (isDarkMode ? { borderColor: DarkPokerColors.error, backgroundColor: DarkPokerColors.surfaceBackground } : styles.inputError) : null
+          ]}>
+            <Text style={[styles.currencySymbol, { color: isDarkMode ? DarkPokerColors.greenChip : '#27AE60' }]}>$</Text>
             <TextInput
               style={[
                 styles.amountInput,
-                errors.amount ? styles.inputError : null
+                { color: isDarkMode ? DarkPokerColors.primaryText : '#2C3E50' }
               ]}
+              placeholderTextColor={isDarkMode ? DarkPokerColors.placeholderText : '#999'}
               value={amount}
               onChangeText={handleAmountChange}
               placeholder="0.00"
@@ -346,7 +363,7 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
             />
           </View>
           {errors.amount && (
-            <Text style={styles.errorText}>{errors.amount}</Text>
+            <Text style={[styles.errorText, { color: isDarkMode ? DarkPokerColors.error : '#E74C3C' }]}>{errors.amount}</Text>
           )}
         </View>
 
@@ -375,7 +392,7 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
         </TouchableOpacity>
 
         {eligiblePlayers.length === 0 && (
-          <Text style={styles.noPlayersText}>
+          <Text style={[styles.noPlayersText, { color: isDarkMode ? DarkPokerColors.secondaryText : '#7F8C8D' }]}>
             {transactionType === 'buy_in' 
               ? 'No active players available for buy-in'
               : 'No players with balance available for cash-out'
@@ -385,10 +402,10 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
 
         {/* Organizer Confirmation Modal */}
         {showOrganizerConfirmation && pendingCashOut && (
-          <View style={styles.modalOverlay}>
-            <View style={styles.modalContainer}>
-              <Text style={styles.modalTitle}>Organizer Confirmation Required</Text>
-              <Text style={styles.modalMessage}>
+          <View style={[styles.modalOverlay, { backgroundColor: isDarkMode ? DarkPokerColors.overlay : 'rgba(0, 0, 0, 0.5)' }]}>
+            <View style={[styles.modalContainer, { backgroundColor: isDarkMode ? DarkPokerColors.modalBackground : '#FFFFFF' }]}>
+              <Text style={[styles.modalTitle, { color: isDarkMode ? DarkPokerColors.primaryText : '#2C3E50' }]}>Organizer Confirmation Required</Text>
+              <Text style={[styles.modalMessage, { color: isDarkMode ? DarkPokerColors.secondaryText : '#34495E' }]}>
                 Cash-out amount ${pendingCashOut.amount.toFixed(2)} exceeds player's total buy-ins. 
                 Do you want to proceed as the organizer?
               </Text>
@@ -397,13 +414,13 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
                   style={[styles.modalButton, styles.modalButtonCancel]}
                   onPress={() => handleOrganizerConfirmation(false)}
                 >
-                  <Text style={styles.modalButtonText}>Cancel</Text>
+                  <Text style={[styles.modalButtonText, { color: '#FFFFFF' }]}>Cancel</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={[styles.modalButton, styles.modalButtonConfirm]}
                   onPress={() => handleOrganizerConfirmation(true)}
                 >
-                  <Text style={styles.modalButtonText}>Confirm</Text>
+                  <Text style={[styles.modalButtonText, { color: '#FFFFFF' }]}>Confirm</Text>
                 </TouchableOpacity>
               </View>
             </View>
