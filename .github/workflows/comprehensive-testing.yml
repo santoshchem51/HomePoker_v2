@@ -225,6 +225,7 @@ jobs:
       - name: Build Android (Debug)
         run: |
           cd android
+          chmod +x ./gradlew
           ./gradlew assembleDebug --no-daemon
         env:
           JAVA_HOME: ${{ env.JAVA_HOME }}
