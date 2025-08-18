@@ -3,6 +3,20 @@
  * Fixed version - resolves timeout issues
  */
 
+// Mock React Native Platform
+jest.mock('react-native', () => {
+  const RN = jest.requireActual('react-native');
+  return {
+    ...RN,
+    Platform: {
+      ...RN.Platform,
+      OS: 'android',
+      Version: 25,
+      select: jest.fn((options) => options.android || options.default || options.native),
+    },
+  };
+});
+
 // Mock React Native SQLite - fixed to prevent hangs
 jest.mock('react-native-sqlite-storage', () => {
   const mockTx = {
@@ -92,11 +106,6 @@ jest.mock('react-native-fs', () => ({
 jest.mock('@react-native-clipboard/clipboard', () => ({
   setString: jest.fn(),
   getString: jest.fn(() => Promise.resolve('')),
-}));
-
-// Mock picker
-jest.mock('@react-native-picker/picker', () => ({
-  Picker: 'Picker',
 }));
 
 // Mock Async Storage
