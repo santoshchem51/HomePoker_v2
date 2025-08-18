@@ -78,7 +78,10 @@ jobs:
       run: |
         cd android
         chmod +x ./gradlew
-        ./gradlew assembleDebug --no-daemon
+        ./gradlew clean
+        ./gradlew assembleDebug --no-daemon --max-workers=2 --no-parallel
+      env:
+        GRADLE_OPTS: "-Xmx3072m -XX:MaxMetaspaceSize=768m"
         
     - name: Upload APK artifact
       uses: actions/upload-artifact@v4
@@ -113,7 +116,7 @@ jobs:
       env:
         NO_FLIPPER: 1  # Disable Flipper for CI builds (faster)
         
-    - name: Build iOS
+    - name: Build iOS Debug (Simulator)
       run: |
         cd ios
         xcodebuild -workspace PokePot.xcworkspace \
@@ -127,6 +130,73 @@ jobs:
           build
       env:
         RCT_NEW_ARCH_ENABLED: 0  # Disable new architecture for stability
+        
+    - name: Build iOS Release Archive (for IPA)
+      run: |
+        cd ios
+        xcodebuild archive \
+          -workspace PokePot.xcworkspace \
+          -scheme PokePot \
+          -configuration Release \
+          -destination 'generic/platform=iOS' \
+          -archivePath build/PokePot.xcarchive \
+          CODE_SIGN_IDENTITY="" \
+          CODE_SIGNING_REQUIRED=NO \
+          CODE_SIGNING_ALLOWED=NO \
+          PROVISIONING_PROFILE=""
+      env:
+        RCT_NEW_ARCH_ENABLED: 0
+        
+    - name: Export Unsigned IPA
+      run: |
+        cd ios
+        # Create export options plist for unsigned IPA
+        cat > ExportOptions.plist << EOF
+        <?xml version="1.0" encoding="UTF-8"?>
+        <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+        <plist version="1.0">
+        <dict>
+            <key>method</key>
+            <string>development</string>
+            <key>signingStyle</key>
+            <string>manual</string>
+            <key>stripSwiftSymbols</key>
+            <true/>
+            <key>uploadBitcode</key>
+            <false/>
+            <key>uploadSymbols</key>
+            <false/>
+            <key>compileBitcode</key>
+            <false/>
+        </dict>
+        </plist>
+        EOF
+        
+        # Export archive to IPA
+        xcodebuild -exportArchive \
+          -archivePath build/PokePot.xcarchive \
+          -exportPath build/ipa \
+          -exportOptionsPlist ExportOptions.plist \
+          -allowProvisioningUpdates
+          
+    - name: Upload Unsigned IPA Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: PokePot-iOS-Unsigned-IPA
+        path: |
+          ios/build/ipa/*.ipa
+          ios/build/PokePot.xcarchive
+        retention-days: 30
+        
+    - name: Upload iOS Build Logs (on failure)
+      if: failure()
+      uses: actions/upload-artifact@v4
+      with:
+        name: ios-build-logs-ci
+        path: |
+          ios/build/Logs/
+          ios/DerivedData/*/Logs/
+        retention-days: 7
           
   security:
     name: Security Scan

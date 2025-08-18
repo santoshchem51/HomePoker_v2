@@ -226,9 +226,11 @@ jobs:
         run: |
           cd android
           chmod +x ./gradlew
-          ./gradlew assembleDebug --no-daemon
+          ./gradlew clean
+          ./gradlew assembleDebug --no-daemon --max-workers=2 --no-parallel
         env:
           JAVA_HOME: ${{ env.JAVA_HOME }}
+          GRADLE_OPTS: "-Xmx3072m -XX:MaxMetaspaceSize=768m"
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
@@ -266,7 +268,7 @@ jobs:
         env:
           NO_FLIPPER: 1  # Disable Flipper for CI builds (faster)
 
-      - name: Build iOS (Debug)
+      - name: Build iOS Debug (Simulator Test)
         run: |
           cd ios
           xcodebuild -workspace PokePot.xcworkspace \
@@ -281,12 +283,71 @@ jobs:
         env:
           RCT_NEW_ARCH_ENABLED: 0  # Disable new architecture for stability
 
+      - name: Build iOS Release Archive (Comprehensive Test)
+        run: |
+          cd ios
+          xcodebuild archive \
+            -workspace PokePot.xcworkspace \
+            -scheme PokePot \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -archivePath build/PokePot-Comprehensive.xcarchive \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            PROVISIONING_PROFILE=""
+        env:
+          RCT_NEW_ARCH_ENABLED: 0
+
+      - name: Export Unsigned IPA (Comprehensive)
+        run: |
+          cd ios
+          # Create export options for comprehensive testing
+          cat > ExportOptions-Comprehensive.plist << EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+              <key>method</key>
+              <string>development</string>
+              <key>signingStyle</key>
+              <string>manual</string>
+              <key>stripSwiftSymbols</key>
+              <true/>
+              <key>uploadBitcode</key>
+              <false/>
+              <key>uploadSymbols</key>
+              <false/>
+              <key>compileBitcode</key>
+              <false/>
+          </dict>
+          </plist>
+          EOF
+          
+          # Export to IPA
+          xcodebuild -exportArchive \
+            -archivePath build/PokePot-Comprehensive.xcarchive \
+            -exportPath build/ipa-comprehensive \
+            -exportOptionsPlist ExportOptions-Comprehensive.plist \
+            -allowProvisioningUpdates
+
+      - name: Upload iOS Comprehensive Build Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: PokePot-iOS-Comprehensive-Build
+          path: |
+            ios/build/ipa-comprehensive/*.ipa
+            ios/build/PokePot-Comprehensive.xcarchive
+          retention-days: 14
+
       - name: Upload iOS build logs
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: ios-build-logs
-          path: ios/build/Logs/Build/
+          name: ios-build-logs-comprehensive
+          path: |
+            ios/build/Logs/
+            ios/DerivedData/*/Logs/
           retention-days: 7
 
   # Coverage Validation
