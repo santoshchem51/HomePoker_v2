@@ -157,7 +157,7 @@ jobs:
         <plist version="1.0">
         <dict>
             <key>method</key>
-            <string>development</string>
+            <string>debugging</string>
             <key>signingStyle</key>
             <string>manual</string>
             <key>stripSwiftSymbols</key>
@@ -168,16 +168,38 @@ jobs:
             <false/>
             <key>compileBitcode</key>
             <false/>
+            <key>signingCertificate</key>
+            <string>-</string>
+            <key>provisioningProfiles</key>
+            <dict/>
         </dict>
         </plist>
         EOF
         
-        # Export archive to IPA
-        xcodebuild -exportArchive \
+        # Export archive to IPA (fallback to manual export if automated fails)
+        if ! xcodebuild -exportArchive \
           -archivePath build/PokePot.xcarchive \
           -exportPath build/ipa \
           -exportOptionsPlist ExportOptions.plist \
-          -allowProvisioningUpdates
+          -allowProvisioningUpdates; then
+          
+          echo "Automated export failed, creating manual unsigned IPA..."
+          mkdir -p build/ipa
+          
+          # Extract .app from archive
+          cp -r build/PokePot.xcarchive/Products/Applications/PokePot.app build/ipa/
+          
+          # Create Payload directory structure for IPA
+          mkdir -p build/ipa/Payload
+          mv build/ipa/PokePot.app build/ipa/Payload/
+          
+          # Create unsigned IPA
+          cd build/ipa
+          zip -r PokePot-unsigned.ipa Payload/
+          cd ../..
+          
+          echo "✅ Manual unsigned IPA created: build/ipa/PokePot-unsigned.ipa"
+        fi
           
     - name: Upload Unsigned IPA Artifact
       uses: actions/upload-artifact@v4

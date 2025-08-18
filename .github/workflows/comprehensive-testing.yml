@@ -309,7 +309,7 @@ jobs:
           <plist version="1.0">
           <dict>
               <key>method</key>
-              <string>development</string>
+              <string>debugging</string>
               <key>signingStyle</key>
               <string>manual</string>
               <key>stripSwiftSymbols</key>
@@ -320,16 +320,38 @@ jobs:
               <false/>
               <key>compileBitcode</key>
               <false/>
+              <key>signingCertificate</key>
+              <string>-</string>
+              <key>provisioningProfiles</key>
+              <dict/>
           </dict>
           </plist>
           EOF
           
-          # Export to IPA
-          xcodebuild -exportArchive \
+          # Export to IPA (with fallback to manual creation)
+          if ! xcodebuild -exportArchive \
             -archivePath build/PokePot-Comprehensive.xcarchive \
             -exportPath build/ipa-comprehensive \
             -exportOptionsPlist ExportOptions-Comprehensive.plist \
-            -allowProvisioningUpdates
+            -allowProvisioningUpdates; then
+            
+            echo "Automated export failed, creating manual unsigned IPA..."
+            mkdir -p build/ipa-comprehensive
+            
+            # Extract .app from archive
+            cp -r build/PokePot-Comprehensive.xcarchive/Products/Applications/PokePot.app build/ipa-comprehensive/
+            
+            # Create Payload directory structure for IPA
+            mkdir -p build/ipa-comprehensive/Payload
+            mv build/ipa-comprehensive/PokePot.app build/ipa-comprehensive/Payload/
+            
+            # Create unsigned IPA
+            cd build/ipa-comprehensive
+            zip -r PokePot-comprehensive-unsigned.ipa Payload/
+            cd ../..
+            
+            echo "✅ Manual comprehensive unsigned IPA created"
+          fi
 
       - name: Upload iOS Comprehensive Build Artifacts
         uses: actions/upload-artifact@v4
