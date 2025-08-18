@@ -15,6 +15,7 @@ import { BrightnessOverlay } from './src/components/common/BrightnessControl';
 import { DarkPokerColors } from './src/styles/darkTheme.styles';
 import AppNavigator from './src/navigation/AppNavigator';
 import ToastManager from './src/components/common/ToastManager';
+import { ErrorBoundary } from './src/components/common/ErrorBoundary';
 
 // Performance monitoring for startup
 let startupStartTime = Date.now();
@@ -81,6 +82,7 @@ function ThemedAppContent() {
       }
       
       console.log(`App startup completed in ${totalStartupTime}ms`);
+      console.log('🚀 APP DEPLOYMENT VERIFICATION: ValidationResult-Fix-v2.0-15:10-BUILD');
       
     } catch (error) {
       const servicesInitTime = Date.now() - servicesStartTime;
@@ -298,14 +300,16 @@ function ThemedAppContent() {
 // Main App component with ThemeProvider wrapper
 function App() {
   return (
-    <ThemeProvider>
-      <ThemedAppContent />
-    </ThemeProvider>
+    <ErrorBoundary>
+      <ThemeProvider>
+        <ThemedAppContent />
+      </ThemeProvider>
+    </ErrorBoundary>
   );
 }
 
-// Dynamic styles helper function
-const getDynamicStyles = (isDarkMode: boolean) => {
+// Dynamic styles helper function for theme switching
+export const getDynamicStyles = (isDarkMode: boolean) => {
   return {
     container: {
       backgroundColor: isDarkMode ? DarkPokerColors.background : '#f5f5f5',

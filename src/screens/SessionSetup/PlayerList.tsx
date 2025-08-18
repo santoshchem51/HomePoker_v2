@@ -15,6 +15,8 @@ import {
 import { showToast } from '../../components/common/ToastManager';
 import { Player } from '../../types/player';
 import { PlayerCard } from './PlayerCard';
+import { useTheme } from '../../contexts/ThemeContext';
+import { DarkPokerColors } from '../../styles/darkTheme.styles';
 
 export interface PlayerListProps {
   players: Player[];
@@ -33,6 +35,7 @@ export const PlayerList: React.FC<PlayerListProps> = ({
   maxPlayers,
   minPlayers
 }) => {
+  const { isDarkMode } = useTheme();
   const [newPlayerName, setNewPlayerName] = useState('');
   const [buyInAmount, setBuyInAmount] = useState('');
   const [addingPlayer, setAddingPlayer] = useState(false);
@@ -216,9 +219,9 @@ export const PlayerList: React.FC<PlayerListProps> = ({
   const canAddPlayer = players.length < maxPlayers && !loading && !addingPlayer;
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: isDarkMode ? DarkPokerColors.cardBackground : 'white' }]}>
       <View style={styles.header}>
-        <Text style={styles.title}>Players</Text>
+        <Text style={[styles.title, { color: isDarkMode ? DarkPokerColors.primaryText : '#333' }]}>Players</Text>
         <View style={styles.playerCount}>
           <Text style={[
             styles.playerCountText,
@@ -227,10 +230,10 @@ export const PlayerList: React.FC<PlayerListProps> = ({
             {players.length}/{maxPlayers}
           </Text>
           {players.length >= minPlayers && (
-            <Text style={styles.minPlayersText}>✓ Ready to start</Text>
+            <Text style={[styles.minPlayersText, { color: isDarkMode ? DarkPokerColors.secondaryText : '#666' }]}>✓ Ready to start</Text>
           )}
           {players.length < minPlayers && (
-            <Text style={styles.minPlayersText}>
+            <Text style={[styles.minPlayersText, { color: isDarkMode ? DarkPokerColors.secondaryText : '#666' }]}>
               Need {minPlayers - players.length} more players
             </Text>
           )}
@@ -244,6 +247,11 @@ export const PlayerList: React.FC<PlayerListProps> = ({
             style={[
               styles.addPlayerInput,
               styles.nameInput,
+              {
+                backgroundColor: isDarkMode ? DarkPokerColors.surfaceBackground : '#f9f9f9',
+                borderColor: isDarkMode ? DarkPokerColors.border : '#ddd',
+                color: isDarkMode ? DarkPokerColors.primaryText : '#333'
+              },
               error ? styles.addPlayerInputError : null
             ]}
             value={newPlayerName}
@@ -252,21 +260,29 @@ export const PlayerList: React.FC<PlayerListProps> = ({
               clearError();
             }}
             placeholder="Enter player name"
+            placeholderTextColor={isDarkMode ? DarkPokerColors.secondaryText : '#999'}
             maxLength={50}
             editable={canAddPlayer}
             testID="add-player-input"
           />
-          <View style={styles.buyInInputContainer}>
-            <Text style={styles.currencySymbol}>$</Text>
+          <View style={[styles.buyInInputContainer, {
+            backgroundColor: isDarkMode ? DarkPokerColors.surfaceBackground : '#f9f9f9',
+            borderColor: isDarkMode ? DarkPokerColors.border : '#ddd'
+          }]}>
+            <Text style={[styles.currencySymbol, { color: isDarkMode ? DarkPokerColors.secondaryText : '#666' }]}>$</Text>
             <TextInput
               style={[
                 styles.addPlayerInput,
                 styles.buyInInput,
+                {
+                  color: isDarkMode ? DarkPokerColors.primaryText : '#333'
+                },
                 error ? styles.addPlayerInputError : null
               ]}
               value={buyInAmount}
               onChangeText={handleBuyInAmountChange}
               placeholder="Buy-in"
+              placeholderTextColor={isDarkMode ? DarkPokerColors.secondaryText : '#999'}
               keyboardType="numeric"
               maxLength={6}
               editable={canAddPlayer}
@@ -317,22 +333,22 @@ export const PlayerList: React.FC<PlayerListProps> = ({
         />
       ) : (
         <View style={styles.emptyState}>
-          <Text style={styles.emptyStateText}>No players added yet</Text>
-          <Text style={styles.emptyStateSubtext}>
+          <Text style={[styles.emptyStateText, { color: isDarkMode ? DarkPokerColors.secondaryText : '#666' }]}>No players added yet</Text>
+          <Text style={[styles.emptyStateSubtext, { color: isDarkMode ? DarkPokerColors.secondaryText : '#999' }]}>
             Add {minPlayers}-{maxPlayers} players to start the game
           </Text>
         </View>
       )}
 
       {/* Help Text */}
-      <View style={styles.helpContainer}>
-        <Text style={styles.helpText}>
+      <View style={[styles.helpContainer, { borderTopColor: isDarkMode ? DarkPokerColors.border : '#eee' }]}>
+        <Text style={[styles.helpText, { color: isDarkMode ? DarkPokerColors.secondaryText : '#666' }]}>
           • Players will be guests by default
         </Text>
-        <Text style={styles.helpText}>
+        <Text style={[styles.helpText, { color: isDarkMode ? DarkPokerColors.secondaryText : '#666' }]}>
           • Names must be unique within the session
         </Text>
-        <Text style={styles.helpText}>
+        <Text style={[styles.helpText, { color: isDarkMode ? DarkPokerColors.secondaryText : '#666' }]}>
           • Players can be removed until the game starts
         </Text>
       </View>

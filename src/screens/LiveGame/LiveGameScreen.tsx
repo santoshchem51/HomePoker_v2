@@ -14,7 +14,6 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  Alert,
 } from 'react-native';
 import { showToast } from '../../components/common/ToastManager';
 import { ConfirmationDialog } from '../../components/common/ConfirmationDialog';
@@ -28,7 +27,16 @@ import { DarkPokerColors } from '../../styles/darkTheme.styles';
 import { AmountInputModal } from '../../components/common/AmountInputModal';
 import { PlayerActionButtons } from '../../components/poker/PlayerActionButtons';
 import { ServiceError, ErrorCode } from '../../types/errors';
+import { 
+  ValidationResult, 
+  TransactionValidationResult, 
+  ValidationHelper,
+  validationToModalProps,
+  isValidationFailure,
+  requiresConfirmation 
+} from '../../types/validation';
 import { Player } from '../../types/player';
+import TransactionService from '../../services/core/TransactionService';
 import ChipAnimation from '../../components/animations/ChipAnimation';
 import AnimatedBalanceCounter from '../../components/animations/AnimatedBalanceCounter';
 
@@ -81,6 +89,7 @@ const LiveGameScreenComponent: React.FC = () => {
   // Pot validation error state
   const [showPotValidationError, setShowPotValidationError] = useState(false);
   const [potValidationMessage, setPotValidationMessage] = useState('');
+  const [potValidationTitle, setPotValidationTitle] = useState('');
 
   // Store hooks - only basic session management
   const {
@@ -88,7 +97,7 @@ const LiveGameScreenComponent: React.FC = () => {
     players,
     error: sessionError,
     loading: sessionLoading,
-    actions: { loadSessionState, recordBuyIn, recordCashOut },
+    actions: { loadSessionState },
   } = useSessionStore();
 
   // Load session data on mount
@@ -136,10 +145,33 @@ const LiveGameScreenComponent: React.FC = () => {
     }
 
     setTransactionLoading(true);
+    const transactionService = TransactionService.getInstance();
     
     try {
       if (modalState.transactionType === 'buy_in') {
-        await recordBuyIn(sessionId, modalState.selectedPlayer.id, amount);
+        // NEW APPROACH: Use ValidationResult pattern for buy-in
+        const result = await transactionService.validateAndRecordBuyIn(
+          sessionId, 
+          modalState.selectedPlayer.id, 
+          amount
+        );
+        
+        if (isValidationFailure(result.validation)) {
+          // Reset loading state
+          setTransactionLoading(false);
+          // Close the input modal first
+          handleModalCancel();
+          
+          // Show validation error dialog
+          setPotValidationTitle(result.validation.title || '⚠️ Validation Error');
+          setPotValidationMessage(result.validation.message || 'Please check your input and try again.');
+          setShowPotValidationError(true);
+          return;
+        }
+        
+        // Success case - transaction already recorded by validateAndRecordBuyIn
+        // Refresh session state to reflect the changes
+        await loadSessionState(sessionId);
         
         // Trigger chip animation for buy-in
         const chipAnimationId = Date.now().toString();
@@ -147,8 +179,8 @@ const LiveGameScreenComponent: React.FC = () => {
           id: chipAnimationId,
           amount,
           type: 'buy-in',
-          startX: 200, // Center of screen
-          startY: 300  // Approximate player row position
+          startX: 200,
+          startY: 300
         }]);
         
         // Show success toast
@@ -158,22 +190,47 @@ const LiveGameScreenComponent: React.FC = () => {
           message: `$${amount.toFixed(2)} for ${modalState.selectedPlayer.name}`,
           duration: 2000,
         });
+        
       } else {
-        // Pre-validate cash-out amount against available pot
-        if (currentSession && amount > currentSession.totalPot) {
+        // DEPLOYMENT MARKER: ValidationResult fix deployed at 15:05
+        console.log('🚀 DEPLOYMENT MARKER: LiveGameScreen using validateAndRecordCashOut - 15:05');
+        // NEW APPROACH: Use ValidationResult pattern for cash-out  
+        const result = await transactionService.validateAndRecordCashOut(
+          sessionId, 
+          modalState.selectedPlayer.id, 
+          amount,
+          'manual', // method
+          'user',   // createdBy
+          undefined, // description
+          false     // organizerConfirmed
+        );
+        
+        if (isValidationFailure(result.validation)) {
           // Reset loading state
           setTransactionLoading(false);
-          
           // Close the input modal first
           handleModalCancel();
           
-          // Show pot validation dialog immediately
-          setPotValidationMessage(`Cannot cash out $${amount.toFixed(2)}. Only $${currentSession.totalPot.toFixed(2)} remaining in pot.`);
+          // Check if this requires organizer confirmation
+          if (requiresConfirmation(result.validation)) {
+            console.log('✅ Organizer confirmation required via ValidationResult');
+            setPendingCashOut({ player: modalState.selectedPlayer, amount });
+            setShowOrganizerConfirmation(true);
+            return;
+          }
+          
+          // Regular validation error - show dialog
+          setPotValidationTitle(result.validation.title || '💰 Transaction Error');
+          setPotValidationMessage(result.validation.message || 'Please check your input and try again.');
           setShowPotValidationError(true);
-          return; // Don't proceed with transaction
+          return;
         }
         
-        await recordCashOut(sessionId, modalState.selectedPlayer.id, amount);
+        // Success case - transaction already recorded by validateAndRecordCashOut
+        // Refresh session state to reflect the completed transaction
+        if (result.transaction) {
+          await loadSessionState(sessionId);
+        }
         
         // Trigger chip animation for cash-out
         const chipAnimationId = Date.now().toString();
@@ -181,8 +238,8 @@ const LiveGameScreenComponent: React.FC = () => {
           id: chipAnimationId,
           amount,
           type: 'cash-out',
-          startX: 200, // Center of screen
-          startY: 300  // Approximate player row position
+          startX: 200,
+          startY: 300
         }]);
         
         // Show success toast
@@ -198,39 +255,22 @@ const LiveGameScreenComponent: React.FC = () => {
       handleModalCancel();
       
     } catch (error) {
-      console.error('Transaction submission failed:', error);
-      
-      // Handle organizer confirmation requirement
-      if (error instanceof ServiceError && error.code === ErrorCode.ORGANIZER_CONFIRMATION_REQUIRED) {
-        setPendingCashOut({ player: modalState.selectedPlayer, amount });
-        setShowOrganizerConfirmation(true);
-        handleModalCancel(); // Close amount modal
-        return;
-      }
-      
-      // Handle insufficient pot error with ConfirmationDialog
-      if (error instanceof ServiceError && error.code === 'INSUFFICIENT_SESSION_POT') {
-        // Close the input modal first
-        handleModalCancel();
-        
-        // Show custom confirmation dialog
-        setPotValidationMessage(error.message);
-        setShowPotValidationError(true);
-        return; // Don't throw - just return to keep user on screen
-      }
+      // Only system errors should reach here now
+      console.error('System error during transaction:', error);
       
       showToast({
         type: 'error',
-        title: '❌ Transaction Failed',
-        message: error instanceof ServiceError ? error.message : `Failed to record ${modalState.transactionType.replace('_', '-')}`,
+        title: '❌ System Error',
+        message: error instanceof ServiceError ? error.message : 'A system error occurred. Please try again.',
         duration: 3000,
       });
-      // Only throw for non-pot validation errors
+      
+      // System errors should still be thrown for error boundary handling
       throw error;
     } finally {
       setTransactionLoading(false);
     }
-  }, [modalState, sessionId, recordBuyIn, recordCashOut, handleModalCancel]);
+  }, [modalState, sessionId, handleModalCancel, loadSessionState]);
 
   // Organizer confirmation handlers
   const handleOrganizerConfirmation = useCallback(async (confirmed: boolean) => {
@@ -242,9 +282,35 @@ const LiveGameScreenComponent: React.FC = () => {
     }
 
     setTransactionLoading(true);
+    const transactionService = TransactionService.getInstance();
     
     try {
-      await recordCashOut(sessionId, pendingCashOut.player.id, pendingCashOut.amount, true);
+      // NEW APPROACH: Use ValidationResult pattern with organizer confirmation
+      const result = await transactionService.validateAndRecordCashOut(
+        sessionId, 
+        pendingCashOut.player.id, 
+        pendingCashOut.amount,
+        'manual',
+        'user',
+        undefined,
+        true // organizerConfirmed = true
+      );
+      
+      if (isValidationFailure(result.validation)) {
+        // Even with organizer confirmation, other validations might fail
+        showToast({
+          type: 'error',
+          title: '❌ Validation Failed',
+          message: result.validation.message || 'Transaction could not be completed.',
+          duration: 3000,
+        });
+        setPendingCashOut(null);
+        return;
+      }
+      
+      // Success case - transaction already recorded by validateAndRecordCashOut
+      // Refresh session state to reflect the changes
+      await loadSessionState(sessionId);
       
       showToast({
         type: 'success',
@@ -256,18 +322,19 @@ const LiveGameScreenComponent: React.FC = () => {
       setPendingCashOut(null);
       
     } catch (error) {
-      console.error('Confirmed cash-out submission failed:', error);
+      // Only system errors should reach here
+      console.error('System error in organizer confirmation:', error);
       showToast({
         type: 'error',
-        title: '❌ Cash-out Failed',
-        message: error instanceof ServiceError ? error.message : 'Failed to record cash-out. Please try again.',
+        title: '❌ System Error',
+        message: error instanceof ServiceError ? error.message : 'A system error occurred. Please try again.',
         duration: 3000,
       });
       setPendingCashOut(null);
     } finally {
       setTransactionLoading(false);
     }
-  }, [pendingCashOut, sessionId, recordCashOut]);
+  }, [pendingCashOut, sessionId, loadSessionState]);
 
   const handleEndSession = useCallback(async () => {
     try {
@@ -320,6 +387,7 @@ const LiveGameScreenComponent: React.FC = () => {
       setPendingCashOut(null);
       setShowPotValidationError(false);
       setPotValidationMessage('');
+      setPotValidationTitle('');
     });
   }, [addCleanup]);
 
@@ -492,7 +560,7 @@ const LiveGameScreenComponent: React.FC = () => {
       {/* Pot Validation Error Dialog */}
       <ConfirmationDialog
         visible={showPotValidationError}
-        title="💰 Insufficient Pot"
+        title={potValidationTitle}
         message={potValidationMessage}
         confirmText="OK"
         cancelText={undefined}

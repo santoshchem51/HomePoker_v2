@@ -1,51 +1,52 @@
 /**
- * Error handling types and classes for consistent error management
+ * System Error handling types - for true infrastructure/system failures
+ * 
+ * NOTE: User validation errors have been moved to src/types/validation.ts
+ * This file now only contains true system errors that should be exceptions.
  */
 
 export enum ErrorCode {
-  // Database errors
+  // Database/Infrastructure errors (TRUE SYSTEM ERRORS)
   DATABASE_CONNECTION_FAILED = 'DATABASE_CONNECTION_FAILED',
-  DATABASE_QUERY_FAILED = 'DATABASE_QUERY_FAILED',
+  DATABASE_QUERY_FAILED = 'DATABASE_QUERY_FAILED', 
   DATABASE_TRANSACTION_FAILED = 'DATABASE_TRANSACTION_FAILED',
+  DATABASE_INITIALIZATION_FAILED = 'DATABASE_INITIALIZATION_FAILED',
   
-  // Validation errors
-  VALIDATION_ERROR = 'VALIDATION_ERROR',
-  INVALID_SESSION_NAME = 'INVALID_SESSION_NAME',
-  INVALID_PLAYER_NAME = 'INVALID_PLAYER_NAME',
-  INVALID_PLAYER_COUNT = 'INVALID_PLAYER_COUNT',
-  DUPLICATE_PLAYER_NAME = 'DUPLICATE_PLAYER_NAME',
-  
-  // Business logic errors
+  // Resource not found errors (SYSTEM ERRORS)
   SESSION_NOT_FOUND = 'SESSION_NOT_FOUND',
   PLAYER_NOT_FOUND = 'PLAYER_NOT_FOUND',
-  SESSION_ALREADY_STARTED = 'SESSION_ALREADY_STARTED',
-  SESSION_ALREADY_COMPLETED = 'SESSION_ALREADY_COMPLETED',
-  CANNOT_REMOVE_PLAYER = 'CANNOT_REMOVE_PLAYER',
+  TRANSACTION_NOT_FOUND = 'TRANSACTION_NOT_FOUND',
   
-  // Cash-out specific errors
-  CASH_OUT_EXCEEDS_BUY_INS = 'CASH_OUT_EXCEEDS_BUY_INS',
-  SESSION_BALANCE_EXCEEDED = 'SESSION_BALANCE_EXCEEDED',
-  ORGANIZER_CONFIRMATION_REQUIRED = 'ORGANIZER_CONFIRMATION_REQUIRED',
-  PLAYER_ALREADY_CASHED_OUT = 'PLAYER_ALREADY_CASHED_OUT',
-  
-  // Session pot validation errors (Story 1.5 - Simplified)
-  INSUFFICIENT_SESSION_POT = 'INSUFFICIENT_SESSION_POT',
-  SESSION_POT_WOULD_GO_NEGATIVE = 'SESSION_POT_WOULD_GO_NEGATIVE',
-  
-  // Cleanup service errors
+  // Service initialization errors (SYSTEM ERRORS)
   CLEANUP_INIT_FAILED = 'CLEANUP_INIT_FAILED',
-  
-  // Export service errors
   EXPORT_INIT_FAILED = 'EXPORT_INIT_FAILED',
-  EXPORT_FAILED = 'EXPORT_FAILED',
-  INVALID_FORMAT = 'INVALID_FORMAT',
-  EXPORT_MARK_FAILED = 'EXPORT_MARK_FAILED',
-  
-  // Notification service errors
   NOTIFICATION_INIT_FAILED = 'NOTIFICATION_INIT_FAILED',
   
-  // General errors
-  UNKNOWN_ERROR = 'UNKNOWN_ERROR'
+  // Operation failures (SYSTEM ERRORS)
+  EXPORT_FAILED = 'EXPORT_FAILED',
+  EXPORT_MARK_FAILED = 'EXPORT_MARK_FAILED',
+  TRANSACTION_FAILED = 'TRANSACTION_FAILED',
+  UNDO_FAILED = 'UNDO_FAILED',
+  
+  // Internal consistency errors (SYSTEM ERRORS)
+  SESSION_POT_WOULD_GO_NEGATIVE = 'SESSION_POT_WOULD_GO_NEGATIVE',
+  INTEGRITY_CHECK_FAILED = 'INTEGRITY_CHECK_FAILED',
+  BALANCE_CALCULATION_FAILED = 'BALANCE_CALCULATION_FAILED',
+  
+  // Configuration/Format errors (SYSTEM ERRORS)
+  INVALID_FORMAT = 'INVALID_FORMAT',
+  CONFIGURATION_ERROR = 'CONFIGURATION_ERROR',
+  
+  // Catch-all system error
+  UNKNOWN_ERROR = 'UNKNOWN_ERROR',
+  
+  // DEPRECATED - Moving to ValidationCode in validation.ts
+  // These remain temporarily for backward compatibility during migration
+  VALIDATION_ERROR = 'VALIDATION_ERROR', // @deprecated - use ValidationResult instead
+  INSUFFICIENT_SESSION_POT = 'INSUFFICIENT_SESSION_POT', // @deprecated - use ValidationCode
+  LAST_PLAYER_EXACT_AMOUNT_REQUIRED = 'LAST_PLAYER_EXACT_AMOUNT_REQUIRED', // @deprecated - use ValidationCode
+  ORGANIZER_CONFIRMATION_REQUIRED = 'ORGANIZER_CONFIRMATION_REQUIRED', // @deprecated - use ValidationCode
+  PLAYER_ALREADY_CASHED_OUT = 'PLAYER_ALREADY_CASHED_OUT', // @deprecated - use ValidationCode
 }
 
 export class ServiceError extends Error {

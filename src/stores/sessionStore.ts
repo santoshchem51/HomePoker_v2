@@ -11,6 +11,7 @@ import { Transaction, TransactionSummary, PlayerBalance } from '../types/transac
 import { SessionService } from '../services/core/SessionService';
 import TransactionService from '../services/core/TransactionService';
 import { ServiceError } from '../services/core/ServiceError';
+import { ErrorCode } from '../types/errors';
 import { responsiveAsync } from '../utils/ui-responsiveness';
 
 interface SessionStoreState {
@@ -454,9 +455,10 @@ export const useSessionStore = create<SessionStoreState>()(
                   const updatedOptimisticUpdates = { ...state.optimisticUpdates };
                   delete updatedOptimisticUpdates[optimisticTransactionId];
 
-                  // Only set global session error for critical errors, not validation errors
+                  // Only set global session error for critical system errors
+                  // Validation errors are now handled via ValidationResult pattern
                   const shouldSetGlobalError = !(error instanceof ServiceError && 
-                    (error.code === 'INSUFFICIENT_SESSION_POT' || error.code === 'ORGANIZER_CONFIRMATION_REQUIRED'));
+                    (error.code === ErrorCode.INSUFFICIENT_SESSION_POT || error.code === ErrorCode.ORGANIZER_CONFIRMATION_REQUIRED || error.code === ErrorCode.LAST_PLAYER_EXACT_AMOUNT_REQUIRED));
 
                   return {
                     ...state,
@@ -582,9 +584,10 @@ export const useSessionStore = create<SessionStoreState>()(
                   const updatedOptimisticUpdates = { ...state.optimisticUpdates };
                   delete updatedOptimisticUpdates[optimisticTransactionId];
 
-                  // Only set global session error for critical errors, not validation errors
+                  // Only set global session error for critical system errors
+                  // Validation errors are now handled via ValidationResult pattern
                   const shouldSetGlobalError = !(error instanceof ServiceError && 
-                    (error.code === 'INSUFFICIENT_SESSION_POT' || error.code === 'ORGANIZER_CONFIRMATION_REQUIRED'));
+                    (error.code === ErrorCode.INSUFFICIENT_SESSION_POT || error.code === ErrorCode.ORGANIZER_CONFIRMATION_REQUIRED || error.code === ErrorCode.LAST_PLAYER_EXACT_AMOUNT_REQUIRED));
 
                   return {
                     ...state,

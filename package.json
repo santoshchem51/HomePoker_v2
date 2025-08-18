@@ -37,6 +37,9 @@
     "dev-check": "npm run typecheck && npm run lint && npm run test:safe",
     "dev-check:fast": "npm run typecheck && npm run lint && npm run test:safe",
     "reset-cache": "npm start -- --reset-cache",
+    "deploy:dev": "scripts/deploy-dev.bat",
+    "deploy:dev:unix": "scripts/deploy-dev.sh",
+    "metro:reset": "npx kill-port 8082 && npm start -- --reset-cache",
     "postinstall": "jetifier"
   },
   "dependencies": {

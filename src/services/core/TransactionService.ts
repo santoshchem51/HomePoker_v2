@@ -11,7 +11,13 @@ import {
   TRANSACTION_LIMITS 
 } from '../../types/transaction';
 import { ServiceError } from './ServiceError';
+import { ErrorCode } from '../../types/errors';
 import { CalculationUtils } from '../../utils/calculations';
+import { 
+  ValidationResult, 
+  TransactionValidationResult, 
+  ValidationHelper 
+} from '../../types/validation';
 
 export class TransactionService {
   private static instance: TransactionService | null = null;
@@ -46,8 +52,8 @@ export class TransactionService {
     description?: string
   ): Promise<Transaction> {
     try {
-      // Input validation
-      await this.validateBuyInRequest(sessionId, playerId, amount);
+      // Input validation (using legacy method during migration)
+      await this.validateBuyInRequestLegacy(sessionId, playerId, amount);
 
       // Execute buy-in transaction with ACID compliance
       return await this.dbService.executeTransaction(async () => {
@@ -111,9 +117,10 @@ export class TransactionService {
     description?: string,
     organizerConfirmed: boolean = false
   ): Promise<Transaction> {
+    console.log('⚠️ recordCashOut called - OLD legacy method with exceptions!');
     try {
-      // Input validation
-      await this.validateCashOutRequest(sessionId, playerId, amount, organizerConfirmed);
+      // Input validation (using legacy method during migration)
+      await this.validateCashOutRequestLegacy(sessionId, playerId, amount, organizerConfirmed);
 
       // Get player's current state to determine if they're cashing out completely
       const players = await this.dbService.getPlayers(sessionId);
@@ -502,10 +509,432 @@ export class TransactionService {
   }
 
   /**
-   * Validate buy-in request
+   * Check if a player is the last active player in the session
+   * Used for last player cash-out constraint validation
+   */
+  public async isLastActivePlayer(sessionId: string, playerId: string): Promise<boolean> {
+    try {
+      const players = await this.dbService.getPlayers(sessionId);
+      const activePlayers = players.filter(p => p.status === 'active');
+      return activePlayers.length === 1 && activePlayers[0].id === playerId;
+    } catch (error) {
+      console.error('Failed to check if last active player:', error);
+      if (error instanceof ServiceError) {
+        throw error;
+      }
+      throw new ServiceError('PLAYER_STATUS_CHECK_FAILED', `Failed to check player status: ${error}`);
+    }
+  }
+
+  /**
+   * Get the required cash-out amount for the last active player
+   * Returns null if not the last player, or the exact remaining pot amount
+   */
+  public async getRequiredCashOutAmount(sessionId: string, playerId: string): Promise<number | null> {
+    try {
+      const isLast = await this.isLastActivePlayer(sessionId, playerId);
+      if (!isLast) return null;
+      
+      const session = await this.sessionService.getSession(sessionId);
+      if (!session) {
+        throw new ServiceError('SESSION_NOT_FOUND', `Session ${sessionId} not found`);
+      }
+      
+      return session.totalPot;
+    } catch (error) {
+      console.error('Failed to get required cash-out amount:', error);
+      if (error instanceof ServiceError) {
+        throw error;
+      }
+      throw new ServiceError('REQUIRED_AMOUNT_CHECK_FAILED', `Failed to get required cash-out amount: ${error}`);
+    }
+  }
+
+  /**
+   * NEW PUBLIC API METHODS - Use ValidationResult pattern
+   */
+
+  /**
+   * Validate and record buy-in transaction (NEW APPROACH)
+   * Returns validation result first, then proceeds with transaction if valid
+   */
+  public async validateAndRecordBuyIn(
+    sessionId: string,
+    playerId: string,
+    amount: number,
+    method: 'voice' | 'manual' = 'manual',
+    createdBy: string = 'user',
+    description?: string
+  ): Promise<{ validation: TransactionValidationResult; transaction?: Transaction }> {
+    // First validate using new ValidationResult approach
+    const validation = await this.validateBuyInRequest(sessionId, playerId, amount);
+    
+    if (!validation.isValid) {
+      return { validation };
+    }
+    
+    // If validation passes, proceed with transaction using existing method
+    try {
+      const transaction = await this.recordBuyIn(sessionId, playerId, amount, method, createdBy, description);
+      return { validation, transaction };
+    } catch (error) {
+      // System errors should still throw
+      throw error;
+    }
+  }
+
+  /**
+   * Validate and record cash-out transaction (NEW APPROACH)
+   * Returns validation result first, then proceeds with transaction if valid
+   */
+  public async validateAndRecordCashOut(
+    sessionId: string,
+    playerId: string,
+    amount: number,
+    method: 'voice' | 'manual' = 'manual',
+    createdBy: string = 'user',
+    description?: string,
+    organizerConfirmed: boolean = false
+  ): Promise<{ validation: TransactionValidationResult; transaction?: Transaction }> {
+    const deploymentVersion = 'ValidationResult-Fix-v2.0-15:10-BUILD';
+    console.log(`🚀 DEPLOYMENT VERIFICATION: ${deploymentVersion}`);
+    console.log('🎯 validateAndRecordCashOut called - NEW ValidationResult method');
+    // First validate using new ValidationResult approach
+    const validation = await this.validateCashOutRequest(sessionId, playerId, amount, organizerConfirmed);
+    
+    if (!validation.isValid) {
+      return { validation };
+    }
+    
+    // If validation passes, proceed with transaction recording (skip validation since we already did it)
+    try {
+      const transaction = await this.recordCashOutWithoutValidation(sessionId, playerId, amount, method, createdBy, description);
+      return { validation, transaction };
+    } catch (error) {
+      // ValidationResult pattern: Convert system errors to validation failures
+      console.error('System error during transaction recording:', error);
+      const systemErrorValidation = ValidationHelper.failure(
+        'SYSTEM_ERROR' as any,
+        error instanceof Error ? error.message : 'A system error occurred during transaction recording',
+        { title: '🚫 System Error' }
+      );
+      return { validation: systemErrorValidation };
+    }
+  }
+
+  /**
+   * Record cash-out transaction without validation (for use with ValidationResult pattern)
+   * This method assumes validation has already been performed and only records the transaction
+   */
+  private async recordCashOutWithoutValidation(
+    sessionId: string,
+    playerId: string,
+    amount: number,
+    method: 'voice' | 'manual' = 'manual',
+    createdBy: string = 'user',
+    description?: string
+  ): Promise<Transaction> {
+    try {
+      // Get player's current state (no validation, just data retrieval)
+      const players = await this.dbService.getPlayers(sessionId);
+      const player = players.find(p => p.id === playerId);
+      
+      if (!player) {
+        throw new ServiceError('PLAYER_NOT_FOUND', `Player ${playerId} not found`);
+      }
+
+      // In poker, any cash-out typically means the player is leaving the game completely
+      const willCashOutCompletely = true;
+
+      // Execute cash-out transaction with ACID compliance
+      return await this.dbService.executeTransaction(async () => {
+        // Record the transaction
+        const transaction = await this.dbService.recordTransaction({
+          sessionId,
+          playerId,
+          type: 'cash_out',
+          amount,
+          method,
+          isVoided: false,
+          description,
+          createdBy,
+        });
+
+        // Update player balance and cash-out totals
+        await this.dbService.updatePlayer(playerId, {
+          currentBalance: player.currentBalance - amount,
+          totalCashOuts: player.totalCashOuts + amount,
+          status: willCashOutCompletely ? 'cashed_out' : 'active',
+        });
+
+        // Update session total pot (reduce by cash-out amount)
+        const session = await this.dbService.getSession(sessionId);
+        if (session) {
+          const newPotAmount = session.totalPot - amount;
+          await this.dbService.updateSession(sessionId, {
+            totalPot: Math.max(0, newPotAmount) // Prevent negative pot
+          });
+        }
+
+        return transaction;
+      });
+
+    } catch (error) {
+      // Convert database errors to ServiceError for consistent error handling
+      if (error instanceof ServiceError) {
+        throw error;
+      }
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      throw new ServiceError('DATABASE_QUERY_FAILED', `Failed to record cash-out: ${errorMessage}`);
+    }
+  }
+
+  /**
+   * Validate session mathematical integrity
+   * Ensures all buy-ins, cash-outs, and remaining pot balance correctly
+   */
+  public async validateSessionMathematicalIntegrity(sessionId: string): Promise<{
+    isValid: boolean;
+    totalBuyIns: number;
+    totalCashOuts: number;
+    remainingPot: number;
+    discrepancy: number;
+    details: string;
+  }> {
+    try {
+      // Get session data
+      const session = await this.sessionService.getSession(sessionId);
+      if (!session) {
+        throw new ServiceError('SESSION_NOT_FOUND', `Session ${sessionId} not found`);
+      }
+
+      // Get all transactions
+      const transactions = await this.getTransactionHistory(sessionId);
+      
+      // Calculate totals from transactions
+      const buyInTransactions = transactions.filter(t => t.type === 'buy_in' && !t.isVoided);
+      const cashOutTransactions = transactions.filter(t => t.type === 'cash_out' && !t.isVoided);
+      
+      const totalBuyIns = buyInTransactions.reduce((sum, t) => sum + t.amount, 0);
+      const totalCashOuts = cashOutTransactions.reduce((sum, t) => sum + t.amount, 0);
+      const calculatedRemainingPot = totalBuyIns - totalCashOuts;
+      
+      // Compare with session's tracked pot
+      const actualRemainingPot = session.totalPot;
+      const discrepancy = Math.abs(calculatedRemainingPot - actualRemainingPot);
+      
+      // Allow for small rounding errors (1 cent)
+      const isValid = discrepancy < 0.01;
+      
+      const details = isValid 
+        ? 'Session mathematical integrity verified'
+        : `Discrepancy detected: calculated pot $${calculatedRemainingPot.toFixed(2)} vs tracked pot $${actualRemainingPot.toFixed(2)}`;
+
+      return {
+        isValid,
+        totalBuyIns,
+        totalCashOuts,
+        remainingPot: actualRemainingPot,
+        discrepancy,
+        details
+      };
+    } catch (error) {
+      console.error('Failed to validate session mathematical integrity:', error);
+      if (error instanceof ServiceError) {
+        throw error;
+      }
+      throw new ServiceError('INTEGRITY_CHECK_FAILED', `Failed to validate session integrity: ${error}`);
+    }
+  }
+
+  /**
+   * NEW VALIDATION METHODS - Return ValidationResult instead of throwing exceptions
+   */
+
+  /**
+   * Validate buy-in request - Returns ValidationResult (NEW APPROACH)
    * AC: 5
    */
-  private async validateBuyInRequest(
+  public async validateBuyInRequest(
+    sessionId: string, 
+    playerId: string, 
+    amount: number
+  ): Promise<TransactionValidationResult> {
+    try {
+      // Amount validation
+      if (!amount || amount <= 0) {
+        return ValidationHelper.transactionValidation.invalidAmount(
+          amount, 0.01, TRANSACTION_LIMITS.MAX_BUY_IN, 'buy_in'
+        );
+      }
+
+      if (amount < TRANSACTION_LIMITS.MIN_BUY_IN) {
+        return ValidationHelper.transactionValidation.invalidAmount(
+          amount, TRANSACTION_LIMITS.MIN_BUY_IN, TRANSACTION_LIMITS.MAX_BUY_IN, 'buy_in'
+        );
+      }
+
+      if (amount > TRANSACTION_LIMITS.MAX_BUY_IN) {
+        return ValidationHelper.transactionValidation.invalidAmount(
+          amount, TRANSACTION_LIMITS.MIN_BUY_IN, TRANSACTION_LIMITS.MAX_BUY_IN, 'buy_in'
+        );
+      }
+
+      // Session validation
+      const session = await this.sessionService.getSession(sessionId);
+      if (!session || (session.status !== 'active' && session.status !== 'created')) {
+        return ValidationHelper.failure(
+          'INVALID_SESSION_STATE' as any,
+          'Buy-ins are only allowed for created or active sessions',
+          { title: '🎮 Session Not Available' }
+        );
+      }
+
+      // Player validation
+      const players = await this.dbService.getPlayers(sessionId);
+      const player = players.find(p => p.id === playerId);
+      
+      if (!player) {
+        return ValidationHelper.failure(
+          'INVALID_PLAYER_STATE' as any,
+          'Player not found in this session',
+          { title: '👤 Player Not Found' }
+        );
+      }
+
+      if (player.status !== 'active') {
+        return ValidationHelper.failure(
+          'INVALID_PLAYER_STATE' as any,
+          'Buy-ins are only allowed for active players',
+          { title: '⚠️ Player Not Active' }
+        );
+      }
+
+      return ValidationHelper.transactionValidation.success({ sessionId, playerId, amount });
+      
+    } catch (error) {
+      // System errors should still throw
+      throw error;
+    }
+  }
+
+  /**
+   * Validate cash-out request - Returns ValidationResult (NEW APPROACH)
+   * AC: 4, 5, 6
+   */
+  public async validateCashOutRequest(
+    sessionId: string, 
+    playerId: string, 
+    amount: number,
+    organizerConfirmed: boolean = false
+  ): Promise<TransactionValidationResult> {
+    try {
+      // Amount validation
+      if (!amount || amount <= 0) {
+        return ValidationHelper.transactionValidation.invalidAmount(
+          amount, 0.01, TRANSACTION_LIMITS.MAX_CASH_OUT, 'cash_out'
+        );
+      }
+
+      if (amount < TRANSACTION_LIMITS.MIN_CASH_OUT) {
+        return ValidationHelper.transactionValidation.invalidAmount(
+          amount, TRANSACTION_LIMITS.MIN_CASH_OUT, TRANSACTION_LIMITS.MAX_CASH_OUT, 'cash_out'
+        );
+      }
+
+      if (amount > TRANSACTION_LIMITS.MAX_CASH_OUT) {
+        return ValidationHelper.transactionValidation.invalidAmount(
+          amount, TRANSACTION_LIMITS.MIN_CASH_OUT, TRANSACTION_LIMITS.MAX_CASH_OUT, 'cash_out'
+        );
+      }
+
+      // Session validation
+      const session = await this.sessionService.getSession(sessionId);
+      if (!session || (session.status !== 'active' && session.status !== 'created')) {
+        return ValidationHelper.failure(
+          'INVALID_SESSION_STATE' as any,
+          'Cash-outs are only allowed for created or active sessions',
+          { title: '🎮 Session Not Available' }
+        );
+      }
+
+      // Player validation
+      const players = await this.dbService.getPlayers(sessionId);
+      const player = players.find(p => p.id === playerId);
+      
+      if (!player) {
+        return ValidationHelper.failure(
+          'INVALID_PLAYER_STATE' as any,
+          'Player not found in this session',
+          { title: '👤 Player Not Found' }
+        );
+      }
+
+      if (player.status === 'cashed_out') {
+        return ValidationHelper.transactionValidation.playerAlreadyCashedOut(player.name);
+      }
+
+      if (player.status !== 'active') {
+        return ValidationHelper.failure(
+          'INVALID_PLAYER_STATE' as any,
+          'Cash-outs are only allowed for active players',
+          { title: '⚠️ Player Not Active' }
+        );
+      }
+
+      // CRITICAL VALIDATION: Check if amount exceeds pot for ALL players
+      if (amount > session.totalPot) {
+        return ValidationHelper.transactionValidation.insufficientPot(
+          amount, session.totalPot, player.name
+        );
+      }
+      
+      // Last player constraint validation
+      const activePlayers = players.filter(p => p.status === 'active');
+      
+      if (activePlayers.length === 1 && activePlayers[0].id === playerId) {
+        // LAST PLAYER CONSTRAINT: Must cash out exactly the remaining pot
+        const tolerance = 0.01; // Allow 1 cent tolerance for rounding
+        if (Math.abs(amount - session.totalPot) > tolerance && amount < session.totalPot) {
+          // Only show this error if amount is LESS than pot (greater than pot already handled above)
+          return ValidationHelper.transactionValidation.lastPlayerExactAmount(
+            amount, session.totalPot, player.name
+          );
+        }
+      }
+
+      // NOTE: Removed organizer confirmation requirement for normal cash-outs
+      // In a real poker game, players can cash out any amount up to the pot limit
+      // Organizer confirmation is not needed for basic cash-out transactions
+
+      return ValidationHelper.transactionValidation.success({ 
+        sessionId, 
+        playerId, 
+        amount,
+        organizerConfirmed 
+      });
+
+    } catch (error) {
+      // ValidationResult pattern: Convert system errors to validation failures
+      console.error('System error during validation:', error);
+      return ValidationHelper.failure(
+        'SYSTEM_ERROR' as any,
+        error instanceof Error ? error.message : 'A system error occurred during validation',
+        { title: '🚫 System Error' }
+      );
+    }
+  }
+
+  /**
+   * LEGACY VALIDATION METHODS - Keep for backward compatibility during migration
+   * These will be removed in Phase 4
+   */
+
+  /**
+   * Validate buy-in request (LEGACY - throws exceptions)
+   * AC: 5
+   */
+  private async validateBuyInRequestLegacy(
     sessionId: string, 
     playerId: string, 
     amount: number
@@ -543,10 +972,10 @@ export class TransactionService {
   }
 
   /**
-   * Validate cash-out request
+   * Validate cash-out request (LEGACY - throws exceptions)
    * AC: 4, 5, 6
    */
-  private async validateCashOutRequest(
+  private async validateCashOutRequestLegacy(
     sessionId: string, 
     playerId: string, 
     amount: number,
@@ -571,15 +1000,7 @@ export class TransactionService {
       throw new ServiceError('VALIDATION_ERROR', 'Cash-outs are only allowed for created or active sessions');
     }
 
-    // SIMPLIFIED: Only check if cash-out exceeds remaining pot
-    if (amount > session.totalPot) {
-      throw new ServiceError(
-        'INSUFFICIENT_SESSION_POT', 
-        `Cannot cash out $${amount}. Only $${session.totalPot} remaining in pot.`
-      );
-    }
-
-    // Player validation
+    // Player validation - get players early for last player check
     const players = await this.dbService.getPlayers(sessionId);
     const player = players.find(p => p.id === playerId);
     
@@ -595,7 +1016,30 @@ export class TransactionService {
       throw new ServiceError('VALIDATION_ERROR', 'Cash-outs are only allowed for active players');
     }
 
-    // Note: Simple validation - just ensure pot doesn't go negative.
+    // First check if amount exceeds pot for ALL players (including last player)
+    if (amount > session.totalPot) {
+      throw new ServiceError(
+        ErrorCode.INSUFFICIENT_SESSION_POT, 
+        `Cannot cash out $${amount.toFixed(2)}. Only $${session.totalPot.toFixed(2)} remaining in pot.`
+      );
+    }
+    
+    // Then check if this is the last active player - special validation rules apply
+    const activePlayers = players.filter(p => p.status === 'active');
+    
+    if (activePlayers.length === 1 && activePlayers[0].id === playerId) {
+      // LAST PLAYER CONSTRAINT: Must cash out exactly the remaining pot
+      const tolerance = 0.01; // Allow 1 cent tolerance for rounding
+      if (Math.abs(amount - session.totalPot) > tolerance && amount < session.totalPot) {
+        // Only show this error if amount is LESS than pot (greater than pot already handled above)
+        throw new ServiceError(
+          ErrorCode.LAST_PLAYER_EXACT_AMOUNT_REQUIRED,
+          `As the last player, you must cash out exactly $${session.totalPot.toFixed(2)} (the remaining pot). You entered $${amount.toFixed(2)}.`
+        );
+      }
+    }
+
+    // Note: Enhanced validation with last player constraint implemented.
     // Organizer is trusted to verify actual chip amounts during gameplay.
   }
 

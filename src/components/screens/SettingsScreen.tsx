@@ -11,7 +11,7 @@ import { DistanceOptimizedText, CriticalBalanceDisplay, PlayerInfoDisplay } from
 export const SettingsScreen: React.FC = () => {
   const { isDarkMode } = useTheme();
 
-  const backgroundColor = isDarkMode ? DarkPokerColors.background : '#FFFFFF';
+  const backgroundColor = isDarkMode ? DarkPokerColors.background : '#f5f5f5';
   const textColor = isDarkMode ? DarkPokerColors.primaryText : '#212529';
   const secondaryTextColor = isDarkMode ? DarkPokerColors.secondaryText : '#6C757D';
 

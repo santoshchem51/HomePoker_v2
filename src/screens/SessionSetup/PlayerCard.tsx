@@ -11,6 +11,8 @@ import {
 } from 'react-native';
 import { Player } from '../../types/player';
 import { ConfirmationDialog } from '../../components/common/ConfirmationDialog';
+import { useTheme } from '../../contexts/ThemeContext';
+import { DarkPokerColors } from '../../styles/darkTheme.styles';
 
 export interface PlayerCardProps {
   player: Player;
@@ -23,6 +25,7 @@ export const PlayerCard: React.FC<PlayerCardProps> = ({
   onRemove,
   canRemove
 }) => {
+  const { isDarkMode } = useTheme();
   const [showConfirmation, setShowConfirmation] = useState(false);
   
   /**
@@ -61,7 +64,10 @@ export const PlayerCard: React.FC<PlayerCardProps> = ({
   };
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, {
+      backgroundColor: isDarkMode ? DarkPokerColors.surfaceBackground : '#f8f9fa',
+      borderColor: isDarkMode ? DarkPokerColors.border : '#e9ecef'
+    }]}>
       <View style={styles.playerInfo}>
         <View style={styles.avatar}>
           <Text style={styles.avatarText}>
@@ -70,16 +76,19 @@ export const PlayerCard: React.FC<PlayerCardProps> = ({
         </View>
         
         <View style={styles.details}>
-          <Text style={styles.playerName}>{player.name}</Text>
+          <Text style={[styles.playerName, { color: isDarkMode ? DarkPokerColors.primaryText : '#333' }]}>{player.name}</Text>
           <View style={styles.metaInfo}>
-            <Text style={styles.guestBadge}>
+            <Text style={[styles.guestBadge, {
+              color: isDarkMode ? DarkPokerColors.secondaryText : '#666',
+              backgroundColor: isDarkMode ? DarkPokerColors.background : '#e9ecef'
+            }]}>
               {player.isGuest ? 'Guest' : 'Regular'}
             </Text>
-            <Text style={styles.joinTime}>
+            <Text style={[styles.joinTime, { color: isDarkMode ? DarkPokerColors.secondaryText : '#666' }]}>
               • Joined {formatJoinTime(player.joinedAt)}
             </Text>
           </View>
-          <Text style={styles.status}>
+          <Text style={[styles.status, { color: isDarkMode ? DarkPokerColors.secondaryText : '#666' }]}>
             Status: {player.status === 'active' ? 'Active' : 'Cashed Out'}
           </Text>
         </View>
