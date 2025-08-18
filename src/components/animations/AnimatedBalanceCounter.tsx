@@ -3,9 +3,9 @@ import { TextStyle } from 'react-native';
 import Animated, {
   useSharedValue,
   useAnimatedProps,
-  useDerivedValue,
+  useDerivedValue as _useDerivedValue,
   withTiming,
-  interpolate,
+  interpolate as _interpolate,
   useAnimatedStyle,
 } from 'react-native-reanimated';
 import { TextInput } from 'react-native';

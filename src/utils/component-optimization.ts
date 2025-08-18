@@ -115,22 +115,16 @@ export const createOptimizedSelector = <T, U>(
 
 /**
  * Performance-optimized event handlers
+ * Note: This approach doesn't use useCallback inside loops to comply with rules of hooks
  */
 export const useOptimizedHandlers = <T extends Record<string, (...args: any[]) => any>>(
   handlers: T,
   deps: React.DependencyList = []
 ): T => {
   return useMemo(() => {
-    const optimizedHandlers = {} as T;
-    
-    Object.keys(handlers).forEach(key => {
-      optimizedHandlers[key as keyof T] = useCallback(
-        handlers[key as keyof T],
-        deps
-      ) as T[keyof T];
-    });
-    
-    return optimizedHandlers;
+    // Return the handlers wrapped in a memoized object
+    // Individual handlers should be memoized at the component level if needed
+    return { ...handlers };
   }, deps);
 };
 

@@ -33,12 +33,21 @@ The project uses a sophisticated testing architecture with optimized configurati
 ### Build Commands
 - `npm run build:android:debug` - Build Android debug APK (requires JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64)
 - `npm run build:android` - Build Android release APK
+- `npm run build:android:bundle` - Build Android AAB for Play Store
+- `npm run build:ios` - Build iOS archive for App Store
 - `npm run clean:android` - Clean Android build artifacts
+- `npm run clean:ios` - Clean iOS build artifacts
+
+### Utility Commands
+- `npm run metro:reset` - Kill Metro port and start with cache reset
+- `npm run reset-cache` - Reset Metro bundler cache
 
 ### Required Environment
 - **Node.js**: 18+ (specified in package.json engines)
-- **Java**: OpenJDK 17 for Android builds
+- **Java**: OpenJDK 17 for Android builds (JAVA_HOME must be set on Windows)
 - **Android SDK**: Level 31+ (compileSdkVersion 35, targetSdkVersion 35)
+- **React Native**: 0.80.2 with React 19.1.0
+- **Platform Support**: Android 7.0+ (API 24), iOS 13.0+
 
 ## Architecture Overview
 
@@ -159,11 +168,33 @@ When working on stories, follow the established task breakdown patterns and ensu
 
 ## Troubleshooting
 
+### ⚠️ CRITICAL: React Native Deployment Issues
+**See [docs/DEPLOYMENT-GUIDE.md](docs/DEPLOYMENT-GUIDE.md) for comprehensive deployment troubleshooting.**
+
+**Most Common Issue**: Code changes not appearing in app
+- **Root Cause**: Metro bundler cache serving stale JavaScript
+- **Quick Fix**: `npm start -- --reset-cache`
+- **Verification**: Add deployment markers and check logs
+
 ### Common Issues
-1. **Database initialization timeout**: Check app logs, may need device restart
-2. **Test timeouts**: Use `npm run test:core` for faster feedback during development
-3. **Android build failures**: Ensure JAVA_HOME is set to OpenJDK 17
-4. **Voice service errors**: Voice is optional, app should work without it
+1. **Code changes not appearing**: Metro cache issue - always use `npm start -- --reset-cache`
+2. **Database initialization timeout**: Check app logs, may need device restart
+3. **Test timeouts**: Use `npm run test:core` for faster feedback during development
+4. **Android build failures**: Ensure JAVA_HOME is set to OpenJDK 17
+5. **Voice service errors**: Voice is optional, app should work without it
+6. **"Session Error" instead of validation messages**: Check ValidationResult implementation
+
+### Quick Deployment Commands
+```bash
+# Reset Metro and reload (fixes 90% of issues)
+npx kill-port 8082 && npm start -- --reset-cache
+
+# Verify deployment
+adb logcat -s ReactNativeJS | grep "DEPLOYMENT"
+
+# Force reload on device
+adb shell input keyevent KEYCODE_R KEYCODE_R
+```
 
 ### WSL Environment Limitations
 
@@ -200,3 +231,10 @@ When working on stories, follow the established task breakdown patterns and ensu
 - Zustand stores optimized with selectors
 - React Native performance follows best practices
 - **WSL optimization**: Jest config uses `maxWorkers: 1`, `cache: false`, `forceExit: true`
+
+### Windows-Specific Development
+**Important for Windows users**: This project includes Windows-specific build scripts and environment setup:
+- Use `.bat` scripts for Windows commands (e.g., `build-android.bat`, `run-android.bat`)
+- JAVA_HOME environment variable must be set (typically `"C:\Users\{username}\AppData\Local\Programs\Eclipse Adoptium\jdk-17.0.16.8-hotspot"`)
+- ADB path should be added to system PATH or use full paths in commands
+- PowerShell scripts available for advanced build automation
