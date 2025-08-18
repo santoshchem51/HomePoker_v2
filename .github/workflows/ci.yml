@@ -107,7 +107,11 @@ jobs:
     - name: Install CocoaPods
       run: |
         cd ios
-        pod install
+        # Clean pods to ensure fresh installation
+        rm -rf Pods Podfile.lock || true
+        pod install --repo-update
+      env:
+        NO_FLIPPER: 1  # Disable Flipper for CI builds (faster)
         
     - name: Build iOS
       run: |
@@ -115,9 +119,14 @@ jobs:
         xcodebuild -workspace PokePot.xcworkspace \
           -scheme PokePot \
           -configuration Debug \
-          -destination 'generic/platform=iOS Simulator' \
+          -destination 'platform=iOS Simulator,name=iPhone 14,OS=17.0' \
           -derivedDataPath build \
+          CODE_SIGN_IDENTITY="" \
+          CODE_SIGNING_REQUIRED=NO \
+          CODE_SIGNING_ALLOWED=NO \
           build
+      env:
+        RCT_NEW_ARCH_ENABLED: 0  # Disable new architecture for stability
           
   security:
     name: Security Scan

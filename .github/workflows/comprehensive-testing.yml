@@ -237,6 +237,58 @@ jobs:
           path: android/app/build/outputs/apk/debug/
           retention-days: 7
 
+  # Mobile Build Testing (iOS)
+  mobile-build-ios:
+    name: iOS Build Test
+    runs-on: macos-latest
+    needs: [unit-tests, integration-tests]
+    timeout-minutes: 45
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install CocoaPods dependencies
+        run: |
+          cd ios
+          # Clean pods to ensure fresh installation
+          rm -rf Pods Podfile.lock || true
+          pod install --repo-update
+        env:
+          NO_FLIPPER: 1  # Disable Flipper for CI builds (faster)
+
+      - name: Build iOS (Debug)
+        run: |
+          cd ios
+          xcodebuild -workspace PokePot.xcworkspace \
+            -scheme PokePot \
+            -configuration Debug \
+            -destination 'platform=iOS Simulator,name=iPhone 14,OS=17.0' \
+            -derivedDataPath build \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            build
+        env:
+          RCT_NEW_ARCH_ENABLED: 0  # Disable new architecture for stability
+
+      - name: Upload iOS build logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-build-logs
+          path: ios/build/Logs/Build/
+          retention-days: 7
+
   # Coverage Validation
   coverage-check:
     name: Coverage Validation
