@@ -454,13 +454,17 @@ export const useSessionStore = create<SessionStoreState>()(
                   const updatedOptimisticUpdates = { ...state.optimisticUpdates };
                   delete updatedOptimisticUpdates[optimisticTransactionId];
 
+                  // Only set global session error for critical errors, not validation errors
+                  const shouldSetGlobalError = !(error instanceof ServiceError && 
+                    (error.code === 'INSUFFICIENT_SESSION_POT' || error.code === 'ORGANIZER_CONFIRMATION_REQUIRED'));
+
                   return {
                     ...state,
                     transactions: rollbackTransactions,
                     currentSession: updatedSession,
                     players: rollbackPlayers,
                     optimisticUpdates: updatedOptimisticUpdates,
-                    error: error instanceof ServiceError ? error.message : 'Failed to record buy-in'
+                    error: shouldSetGlobalError ? (error instanceof ServiceError ? error.message : 'Failed to record buy-in') : null
                   };
                 });
               }
@@ -578,13 +582,17 @@ export const useSessionStore = create<SessionStoreState>()(
                   const updatedOptimisticUpdates = { ...state.optimisticUpdates };
                   delete updatedOptimisticUpdates[optimisticTransactionId];
 
+                  // Only set global session error for critical errors, not validation errors
+                  const shouldSetGlobalError = !(error instanceof ServiceError && 
+                    (error.code === 'INSUFFICIENT_SESSION_POT' || error.code === 'ORGANIZER_CONFIRMATION_REQUIRED'));
+
                   return {
                     ...state,
                     transactions: rollbackTransactions,
                     currentSession: updatedSession,
                     players: rollbackPlayers,
                     optimisticUpdates: updatedOptimisticUpdates,
-                    error: error instanceof ServiceError ? error.message : 'Failed to record cash-out'
+                    error: shouldSetGlobalError ? (error instanceof ServiceError ? error.message : 'Failed to record cash-out') : null
                   };
                 });
               }

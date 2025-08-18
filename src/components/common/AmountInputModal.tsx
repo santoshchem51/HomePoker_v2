@@ -158,8 +158,9 @@ export const AmountInputModal: React.FC<AmountInputModalProps> = ({
       await onSubmit(numAmount);
       // Modal will be closed by parent component on success
     } catch (submitError) {
-      // Error handling is done by parent component
+      // Re-throw error so parent component can handle it properly
       console.error('AmountInputModal submission error:', submitError);
+      throw submitError;
     }
   };
 

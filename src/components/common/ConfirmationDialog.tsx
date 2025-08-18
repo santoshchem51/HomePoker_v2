@@ -42,14 +42,16 @@ export const ConfirmationDialog: React.FC<ConfirmationDialogProps> = ({
             {message}
           </Text>
           <View style={styles.buttonContainer}>
-            <TouchableOpacity
-              style={[styles.button, styles.cancelButton, { backgroundColor: isDarkMode ? DarkPokerColors.buttonSecondary : '#F5F5F5' }]}
-              onPress={onCancel}
-            >
-              <Text style={[styles.buttonText, { color: isDarkMode ? DarkPokerColors.primaryText : '#666' }]}>
-                {cancelText}
-              </Text>
-            </TouchableOpacity>
+            {cancelText && (
+              <TouchableOpacity
+                style={[styles.button, styles.cancelButton, { backgroundColor: isDarkMode ? DarkPokerColors.buttonSecondary : '#F5F5F5' }]}
+                onPress={onCancel}
+              >
+                <Text style={[styles.buttonText, { color: isDarkMode ? DarkPokerColors.primaryText : '#666' }]}>
+                  {cancelText}
+                </Text>
+              </TouchableOpacity>
+            )}
             <TouchableOpacity
               style={[
                 styles.button,

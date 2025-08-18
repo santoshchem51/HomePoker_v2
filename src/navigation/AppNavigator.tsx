@@ -104,7 +104,11 @@ export default function AppNavigator() {
           component={SettingsScreen}
           options={{ 
             title: 'Settings',
-            headerBackTitle: 'Home'
+            headerBackTitle: 'Home',
+            headerStyle: {
+              backgroundColor: isDarkMode ? DarkPokerColors.background : '#f5f5f5',
+            },
+            headerTintColor: isDarkMode ? DarkPokerColors.primaryText : '#333',
           }}
         />
       </Stack.Navigator>

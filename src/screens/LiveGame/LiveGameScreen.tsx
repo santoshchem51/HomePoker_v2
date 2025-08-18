@@ -77,6 +77,10 @@ const LiveGameScreenComponent: React.FC = () => {
   
   // End session confirmation state
   const [showEndSessionConfirmation, setShowEndSessionConfirmation] = useState(false);
+  
+  // Pot validation error state
+  const [showPotValidationError, setShowPotValidationError] = useState(false);
+  const [potValidationMessage, setPotValidationMessage] = useState('');
 
   // Store hooks - only basic session management
   const {
@@ -155,6 +159,20 @@ const LiveGameScreenComponent: React.FC = () => {
           duration: 2000,
         });
       } else {
+        // Pre-validate cash-out amount against available pot
+        if (currentSession && amount > currentSession.totalPot) {
+          // Reset loading state
+          setTransactionLoading(false);
+          
+          // Close the input modal first
+          handleModalCancel();
+          
+          // Show pot validation dialog immediately
+          setPotValidationMessage(`Cannot cash out $${amount.toFixed(2)}. Only $${currentSession.totalPot.toFixed(2)} remaining in pot.`);
+          setShowPotValidationError(true);
+          return; // Don't proceed with transaction
+        }
+        
         await recordCashOut(sessionId, modalState.selectedPlayer.id, amount);
         
         // Trigger chip animation for cash-out
@@ -190,12 +208,24 @@ const LiveGameScreenComponent: React.FC = () => {
         return;
       }
       
+      // Handle insufficient pot error with ConfirmationDialog
+      if (error instanceof ServiceError && error.code === 'INSUFFICIENT_SESSION_POT') {
+        // Close the input modal first
+        handleModalCancel();
+        
+        // Show custom confirmation dialog
+        setPotValidationMessage(error.message);
+        setShowPotValidationError(true);
+        return; // Don't throw - just return to keep user on screen
+      }
+      
       showToast({
         type: 'error',
         title: '❌ Transaction Failed',
         message: error instanceof ServiceError ? error.message : `Failed to record ${modalState.transactionType.replace('_', '-')}`,
         duration: 3000,
       });
+      // Only throw for non-pot validation errors
       throw error;
     } finally {
       setTransactionLoading(false);
@@ -288,6 +318,8 @@ const LiveGameScreenComponent: React.FC = () => {
       });
       setShowOrganizerConfirmation(false);
       setPendingCashOut(null);
+      setShowPotValidationError(false);
+      setPotValidationMessage('');
     });
   }, [addCleanup]);
 
@@ -455,6 +487,18 @@ const LiveGameScreenComponent: React.FC = () => {
         confirmStyle="destructive"
         onConfirm={confirmEndSession}
         onCancel={() => setShowEndSessionConfirmation(false)}
+      />
+      
+      {/* Pot Validation Error Dialog */}
+      <ConfirmationDialog
+        visible={showPotValidationError}
+        title="💰 Insufficient Pot"
+        message={potValidationMessage}
+        confirmText="OK"
+        cancelText={undefined}
+        confirmStyle="default"
+        onConfirm={() => setShowPotValidationError(false)}
+        onCancel={() => setShowPotValidationError(false)}
       />
     </View>
   );

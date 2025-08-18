@@ -150,8 +150,17 @@ export class TransactionService {
         // Update session total pot (reduce by cash-out amount)
         const session = await this.dbService.getSession(sessionId);
         if (session) {
+          // Safety check: Ensure session pot doesn't go negative (race condition protection)
+          const newPotAmount = session.totalPot - amount;
+          if (newPotAmount < 0) {
+            throw new ServiceError(
+              'SESSION_POT_WOULD_GO_NEGATIVE',
+              `Internal error: Session pot would become negative ($${newPotAmount}). This indicates a validation bug or race condition.`
+            );
+          }
+
           await this.dbService.updateSession(sessionId, {
-            totalPot: session.totalPot - amount,
+            totalPot: newPotAmount,
           });
         }
 
@@ -541,7 +550,7 @@ export class TransactionService {
     sessionId: string, 
     playerId: string, 
     amount: number,
-    _organizerConfirmed: boolean = false
+    organizerConfirmed: boolean = false
   ): Promise<void> {
     // Amount validation
     if (!amount || amount <= 0) {
@@ -562,6 +571,14 @@ export class TransactionService {
       throw new ServiceError('VALIDATION_ERROR', 'Cash-outs are only allowed for created or active sessions');
     }
 
+    // SIMPLIFIED: Only check if cash-out exceeds remaining pot
+    if (amount > session.totalPot) {
+      throw new ServiceError(
+        'INSUFFICIENT_SESSION_POT', 
+        `Cannot cash out $${amount}. Only $${session.totalPot} remaining in pot.`
+      );
+    }
+
     // Player validation
     const players = await this.dbService.getPlayers(sessionId);
     const player = players.find(p => p.id === playerId);
@@ -578,9 +595,8 @@ export class TransactionService {
       throw new ServiceError('VALIDATION_ERROR', 'Cash-outs are only allowed for active players');
     }
 
-    // Note: In poker, players can win/lose chips during gameplay, so their actual
-    // chip count may differ from currentBalance. We allow cash-outs of any amount
-    // since the settlement logic will handle the final accounting.
+    // Note: Simple validation - just ensure pot doesn't go negative.
+    // Organizer is trusted to verify actual chip amounts during gameplay.
   }
 
   /**
