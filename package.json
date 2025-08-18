@@ -42,6 +42,7 @@
     "deploy:dev": "scripts/deploy-dev.bat",
     "deploy:dev:unix": "scripts/deploy-dev.sh",
     "metro:reset": "npx kill-port 8082 && npm start -- --reset-cache",
+    "deps:check": "npx depcheck --ignores=\"@types/*,jest-*,@testing-library/*,@react-native-community/cli*\"",
     "postinstall": "jetifier"
   },
   "dependencies": {
