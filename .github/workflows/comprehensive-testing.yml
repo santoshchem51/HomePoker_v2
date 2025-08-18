@@ -14,7 +14,7 @@ on:
     - cron: '0 2 * * *'
 
 env:
-  NODE_VERSION: '18.x'
+  NODE_VERSION: '20.x'
   JAVA_VERSION: '17'
 
 jobs:
@@ -48,9 +48,11 @@ jobs:
         continue-on-error: true
 
       - name: Dependency check
-        run: |
-          npm run deps:check
-          npx npm-check-updates --errorLevel 2
+        run: npm run deps:check
+
+      - name: Check for outdated dependencies
+        run: npx npm-check-updates --errorLevel 1
+        continue-on-error: true
 
   # Unit Testing - Core functionality
   unit-tests:

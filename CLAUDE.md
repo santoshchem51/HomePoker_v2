@@ -43,7 +43,7 @@ The project uses a sophisticated testing architecture with optimized configurati
 - `npm run reset-cache` - Reset Metro bundler cache
 
 ### Required Environment
-- **Node.js**: 18+ (specified in package.json engines)
+- **Node.js**: 20+ (18.18+ minimum, 20.x recommended for CI compatibility)
 - **Java**: OpenJDK 17 for Android builds (JAVA_HOME must be set on Windows)
 - **Android SDK**: Level 31+ (compileSdkVersion 35, targetSdkVersion 35)
 - **React Native**: 0.80.2 with React 19.1.0
