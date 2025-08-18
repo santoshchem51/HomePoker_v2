@@ -32,6 +32,9 @@ jobs:
     - name: Run tests
       run: npm run test:ci-safe
       
+    - name: Check dependencies
+      run: npm run deps:check
+      
     - name: Upload coverage reports
       uses: codecov/codecov-action@v4
       with:

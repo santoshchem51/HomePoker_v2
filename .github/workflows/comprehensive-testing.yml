@@ -49,7 +49,7 @@ jobs:
 
       - name: Dependency check
         run: |
-          npx depcheck --ignores="@types/*,jest-*,@testing-library/*"
+          npm run deps:check
           npx npm-check-updates --errorLevel 2
 
   # Unit Testing - Core functionality
