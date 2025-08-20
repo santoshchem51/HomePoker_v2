@@ -28,6 +28,7 @@ export type RootStackParamList = {
     sessionId: string;
     sessionName: string;
     isSessionEnd?: boolean;
+    fromScreen?: 'LiveGame' | 'SessionHistory';
   };
   SessionHistory: undefined;
   Settings: undefined;

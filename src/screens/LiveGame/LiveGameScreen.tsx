@@ -87,9 +87,6 @@ const LiveGameScreenComponent: React.FC = () => {
   // End session confirmation state
   const [showEndSessionConfirmation, setShowEndSessionConfirmation] = useState(false);
   
-  // Home navigation confirmation state
-  const [showHomeConfirmation, setShowHomeConfirmation] = useState(false);
-  
   // Pot validation error state
   const [showPotValidationError, setShowPotValidationError] = useState(false);
   const [potValidationMessage, setPotValidationMessage] = useState('');
@@ -111,18 +108,18 @@ const LiveGameScreenComponent: React.FC = () => {
     }
   }, [sessionId, loadSessionState]);
 
-  // Handle hardware back button (Android)
+  // Handle hardware back button (Android) - Go directly to Home
   useEffect(() => {
     const backHandler = BackHandler.addEventListener(
       'hardwareBackPress',
       () => {
-        setShowEndSessionConfirmation(true);
+        navigation.navigate('Home');
         return true; // Prevent default back action
       }
     );
 
     return () => backHandler.remove();
-  }, []);
+  }, [navigation]);
 
   // Player action button handlers
   const handleBuyInPress = useCallback((playerId: string) => {
@@ -387,13 +384,9 @@ const LiveGameScreenComponent: React.FC = () => {
     navigation.navigate('Settlement', { 
       sessionId, 
       sessionName,
-      isSessionEnd: true
+      isSessionEnd: true,
+      fromScreen: 'LiveGame'
     });
-  };
-
-  const confirmHomeNavigation = () => {
-    setShowHomeConfirmation(false);
-    navigation.navigate('Home');
   };
 
   // Setup cleanup for component state
@@ -501,7 +494,7 @@ const LiveGameScreenComponent: React.FC = () => {
         <View style={styles.actionButtons}>
           <TouchableOpacity
             style={[styles.actionButton, styles.homeButton]}
-            onPress={() => setShowHomeConfirmation(true)}
+            onPress={() => navigation.navigate('Home')}
           >
             <Text style={styles.actionButtonText}>🏠 Home</Text>
           </TouchableOpacity>
@@ -584,18 +577,6 @@ const LiveGameScreenComponent: React.FC = () => {
         confirmStyle="destructive"
         onConfirm={confirmEndSession}
         onCancel={() => setShowEndSessionConfirmation(false)}
-      />
-      
-      {/* Home Navigation Confirmation Dialog */}
-      <ConfirmationDialog
-        visible={showHomeConfirmation}
-        title="Leave Session?"
-        message="Are you sure you want to leave this active poker session and return to the home page? The session will continue running."
-        confirmText="Go Home"
-        cancelText="Stay"
-        confirmStyle="default"
-        onConfirm={confirmHomeNavigation}
-        onCancel={() => setShowHomeConfirmation(false)}
       />
       
       {/* Pot Validation Error Dialog */}

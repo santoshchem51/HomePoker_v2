@@ -35,7 +35,7 @@ type SettlementScreenRouteProp = RouteProp<RootStackParamList, 'Settlement'>;
 export const SettlementScreen: React.FC = () => {
   const navigation = useNavigation<SettlementScreenNavigationProp>();
   const route = useRoute<SettlementScreenRouteProp>();
-  const { sessionId, sessionName, isSessionEnd } = route.params;
+  const { sessionId, sessionName, isSessionEnd, fromScreen } = route.params;
   const { isDarkMode } = useTheme();
   const [settlement, setSettlement] = useState<OptimizedSettlement | null>(null);
   const [sessionMetadata, setSessionMetadata] = useState<any>(null);
@@ -150,6 +150,8 @@ export const SettlementScreen: React.FC = () => {
     setShowBackConfirmation(false);
     if (isSessionEnd) {
       handleBackToHome();
+    } else if (fromScreen === 'SessionHistory') {
+      navigation.navigate('SessionHistory');
     } else {
       navigation.goBack();
     }
@@ -317,11 +319,21 @@ export const SettlementScreen: React.FC = () => {
       {/* Back Navigation Confirmation Dialog */}
       <ConfirmationDialog
         visible={showBackConfirmation}
-        title={isSessionEnd ? "Complete Settlement?" : "Return to Game?"}
+        title={isSessionEnd 
+          ? "Complete Settlement?" 
+          : fromScreen === 'SessionHistory' 
+            ? "Return to History?" 
+            : "Return to Game?"}
         message={isSessionEnd 
           ? "Are you sure you want to complete the settlement and return to home?" 
-          : "Are you sure you want to return to the active session?"}
-        confirmText={isSessionEnd ? "Complete" : "Return"}
+          : fromScreen === 'SessionHistory'
+            ? "Are you sure you want to return to the session history?"
+            : "Are you sure you want to return to the active session?"}
+        confirmText={isSessionEnd 
+          ? "Complete" 
+          : fromScreen === 'SessionHistory' 
+            ? "Back to History" 
+            : "Return"}
         cancelText="Stay"
         confirmStyle="default"
         onConfirm={confirmBackNavigation}

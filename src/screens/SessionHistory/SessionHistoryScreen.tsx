@@ -30,7 +30,8 @@ export const SessionHistoryScreen: React.FC = () => {
     navigation.navigate('Settlement', { 
       sessionId, 
       sessionName: sessionName || 'Session',
-      isSessionEnd: false 
+      isSessionEnd: false,
+      fromScreen: 'SessionHistory'
     });
   };
 
