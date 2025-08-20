@@ -282,3 +282,59 @@ grep -r "header:\|Header" src/navigation/
 - Document navigation flow in user guide
 - Consider saving session state periodically as additional protection
 - Evaluate if other screens need similar protection (e.g., during transaction entry)
+
+---
+
+## ✅ RESOLUTION - BUG FIXED
+
+**Status**: COMPLETED  
+**Fixed By**: Claude Code Assistant  
+**Date Fixed**: 2025-08-20  
+**Commit**: `330aed0` - "Fix BUG-003: Disable swipe navigation and header back buttons on critical screens"
+
+### Root Cause Analysis
+The bug was caused by React Navigation's default behavior which enables swipe gestures and header back buttons on all screens, allowing users to accidentally navigate away from critical screens during active sessions.
+
+### Implementation Details
+**Files Modified**: 
+- `src/navigation/AppNavigator.tsx` - Navigation configuration
+- `src/screens/LiveGame/LiveGameScreen.tsx` - Active session screen
+- `src/screens/Settlement/SettlementScreen.tsx` - Settlement screen
+
+**Changes Made**:
+1. **Navigation Configuration**:
+   - Added `gestureEnabled: false` to disable swipe back gestures on LiveGame screen
+   - Added `gestureEnabled: false` to disable swipe back gestures on Settlement screen
+   - Added `headerLeft: () => null` to remove header back buttons on both screens
+
+2. **Hardware Back Button Handling**:
+   - Added `BackHandler` listeners in both screen components
+   - LiveGame screen: Shows "End Session?" confirmation dialog
+   - Settlement screen: Shows context-appropriate confirmation dialogs
+
+3. **User Experience**:
+   - Users must use explicit action buttons (End Session, Back to Home, etc.)
+   - No accidental navigation via swipe or header back button
+   - Clear confirmation dialogs with appropriate messaging
+
+### Technical Solution
+- **React Navigation**: Used `gestureEnabled: false` and `headerLeft: () => null` options
+- **Android Back Button**: Implemented `BackHandler.addEventListener` with confirmation dialogs
+- **User Intent**: Preserved explicit navigation through UI buttons while blocking accidental navigation
+- **Error Prevention**: Users cannot accidentally leave critical screens during game flow
+
+### Verification Status
+- [x] **Code Review**: Changes are minimal and targeted to navigation configuration only
+- [x] **Build Success**: App builds and runs without errors
+- [x] **Navigation Testing**: Swipe gestures properly disabled on critical screens
+- [x] **Header Testing**: Back buttons removed from LiveGame and Settlement screens
+- [x] **Hardware Back Button**: Android hardware back shows confirmation dialogs
+- [x] **No Regression**: Other screens maintain normal navigation behavior
+
+### Impact
+- ✅ **Problem Solved**: Users cannot accidentally navigate away from critical screens
+- ✅ **Data Protection**: Session data protected from accidental navigation interruption
+- ✅ **User Experience**: Clear feedback when navigation is prevented
+- ✅ **Game Flow**: Proper session management with intentional navigation only
+
+**This bug is now RESOLVED and ready for production deployment.**

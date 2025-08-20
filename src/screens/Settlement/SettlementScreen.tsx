@@ -13,9 +13,9 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   BackHandler,
-  Alert,
 } from 'react-native';
 import { showToast } from '../../components/common/ToastManager';
+import { ConfirmationDialog } from '../../components/common/ConfirmationDialog';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { RootStackParamList } from '../../navigation/AppNavigator';
@@ -42,6 +42,9 @@ export const SettlementScreen: React.FC = () => {
   const [transactionBreakdown, setTransactionBreakdown] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  
+  // Confirmation dialog states
+  const [showBackConfirmation, setShowBackConfirmation] = useState(false);
 
   const settlementService = SettlementService.getInstance();
   const transactionService = TransactionService.getInstance();
@@ -114,33 +117,13 @@ export const SettlementScreen: React.FC = () => {
     const backHandler = BackHandler.addEventListener(
       'hardwareBackPress',
       () => {
-        if (isSessionEnd) {
-          // For session end settlements, confirm navigation back to home
-          Alert.alert(
-            'Complete Settlement?',
-            'Are you sure you want to complete the settlement and return to home?',
-            [
-              { text: 'Stay', style: 'cancel' },
-              { text: 'Complete', style: 'default', onPress: handleBackToHome }
-            ]
-          );
-        } else {
-          // For mid-session settlements, confirm return to game
-          Alert.alert(
-            'Return to Game?',
-            'Are you sure you want to return to the active session?',
-            [
-              { text: 'Stay', style: 'cancel' },
-              { text: 'Return', style: 'default', onPress: () => navigation.goBack() }
-            ]
-          );
-        }
+        setShowBackConfirmation(true);
         return true; // Prevent default back action
       }
     );
 
     return () => backHandler.remove();
-  }, [isSessionEnd, handleBackToHome, navigation]);
+  }, []);
 
   const handleShareComplete = (result: ShareResult) => {
     if (result.success) {
@@ -160,6 +143,15 @@ export const SettlementScreen: React.FC = () => {
       console.error('Error completing session:', error);
       // Still navigate home even if there's an error
       navigation.navigate('Home');
+    }
+  };
+
+  const confirmBackNavigation = () => {
+    setShowBackConfirmation(false);
+    if (isSessionEnd) {
+      handleBackToHome();
+    } else {
+      navigation.goBack();
     }
   };
 
@@ -321,6 +313,20 @@ export const SettlementScreen: React.FC = () => {
           <Text style={[styles.navigationButtonText, { color: isDarkMode ? DarkPokerColors.buttonText : '#fff' }]}>Back to Home</Text>
         </TouchableOpacity>
       </View>
+      
+      {/* Back Navigation Confirmation Dialog */}
+      <ConfirmationDialog
+        visible={showBackConfirmation}
+        title={isSessionEnd ? "Complete Settlement?" : "Return to Game?"}
+        message={isSessionEnd 
+          ? "Are you sure you want to complete the settlement and return to home?" 
+          : "Are you sure you want to return to the active session?"}
+        confirmText={isSessionEnd ? "Complete" : "Return"}
+        cancelText="Stay"
+        confirmStyle="default"
+        onConfirm={confirmBackNavigation}
+        onCancel={() => setShowBackConfirmation(false)}
+      />
     </ScrollView>
   );
 };

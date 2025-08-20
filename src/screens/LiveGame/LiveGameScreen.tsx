@@ -15,7 +15,6 @@ import {
   ScrollView,
   TouchableOpacity,
   BackHandler,
-  Alert,
 } from 'react-native';
 import { showToast } from '../../components/common/ToastManager';
 import { ConfirmationDialog } from '../../components/common/ConfirmationDialog';
@@ -88,6 +87,9 @@ const LiveGameScreenComponent: React.FC = () => {
   // End session confirmation state
   const [showEndSessionConfirmation, setShowEndSessionConfirmation] = useState(false);
   
+  // Home navigation confirmation state
+  const [showHomeConfirmation, setShowHomeConfirmation] = useState(false);
+  
   // Pot validation error state
   const [showPotValidationError, setShowPotValidationError] = useState(false);
   const [potValidationMessage, setPotValidationMessage] = useState('');
@@ -114,20 +116,13 @@ const LiveGameScreenComponent: React.FC = () => {
     const backHandler = BackHandler.addEventListener(
       'hardwareBackPress',
       () => {
-        Alert.alert(
-          'End Session?',
-          'Are you sure you want to leave the active poker session?',
-          [
-            { text: 'Stay', style: 'cancel' },
-            { text: 'End Session', style: 'destructive', onPress: handleEndSession }
-          ]
-        );
+        setShowEndSessionConfirmation(true);
         return true; // Prevent default back action
       }
     );
 
     return () => backHandler.remove();
-  }, [handleEndSession]);
+  }, []);
 
   // Player action button handlers
   const handleBuyInPress = useCallback((playerId: string) => {
@@ -396,6 +391,11 @@ const LiveGameScreenComponent: React.FC = () => {
     });
   };
 
+  const confirmHomeNavigation = () => {
+    setShowHomeConfirmation(false);
+    navigation.navigate('Home');
+  };
+
   // Setup cleanup for component state
   useEffect(() => {
     addCleanup(() => {
@@ -500,6 +500,13 @@ const LiveGameScreenComponent: React.FC = () => {
         {/* Action Buttons - Basic session management */}
         <View style={styles.actionButtons}>
           <TouchableOpacity
+            style={[styles.actionButton, styles.homeButton]}
+            onPress={() => setShowHomeConfirmation(true)}
+          >
+            <Text style={styles.actionButtonText}>🏠 Home</Text>
+          </TouchableOpacity>
+          
+          <TouchableOpacity
             style={[styles.actionButton, styles.historyButton]}
             onPress={() => navigation.navigate('SessionHistory')}
           >
@@ -577,6 +584,18 @@ const LiveGameScreenComponent: React.FC = () => {
         confirmStyle="destructive"
         onConfirm={confirmEndSession}
         onCancel={() => setShowEndSessionConfirmation(false)}
+      />
+      
+      {/* Home Navigation Confirmation Dialog */}
+      <ConfirmationDialog
+        visible={showHomeConfirmation}
+        title="Leave Session?"
+        message="Are you sure you want to leave this active poker session and return to the home page? The session will continue running."
+        confirmText="Go Home"
+        cancelText="Stay"
+        confirmStyle="default"
+        onConfirm={confirmHomeNavigation}
+        onCancel={() => setShowHomeConfirmation(false)}
       />
       
       {/* Pot Validation Error Dialog */}
@@ -720,6 +739,10 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     alignItems: 'center',
     marginHorizontal: 8,
+  },
+  
+  homeButton: {
+    backgroundColor: '#2E7D32', // Green for home
   },
   
   historyButton: {
