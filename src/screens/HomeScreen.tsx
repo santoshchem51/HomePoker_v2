@@ -89,7 +89,7 @@ export default function HomeScreen() {
                     borderColor: isDarkMode ? DarkPokerColors.goldChip : '#FF9800'
                   }]}
                   onPress={() => handleContinueSession(session.id, session.name)}
-                  hapticType="light"
+                  enableHaptic={false}
                   scaleAmount={0.98}
                 >
                   <View>
@@ -119,7 +119,7 @@ export default function HomeScreen() {
               backgroundColor: isDarkMode ? DarkPokerColors.buttonPrimary : '#2196F3' 
             }]}
             onPress={handleStartSession}
-            hapticType="medium"
+            enableHaptic={false}
             scaleAmount={0.96}
           >
             <Text style={[styles.primaryButtonText, { 
@@ -134,7 +134,7 @@ export default function HomeScreen() {
               borderColor: isDarkMode ? DarkPokerColors.buttonPrimary : '#2196F3' 
             }]}
             onPress={handleViewHistory}
-            hapticType="light"
+            enableHaptic={false}
             scaleAmount={0.97}
           >
             <Text style={[styles.secondaryButtonText, { 
@@ -149,7 +149,7 @@ export default function HomeScreen() {
               borderColor: isDarkMode ? DarkPokerColors.secondaryText : '#666' 
             }]}
             onPress={handleSettings}
-            hapticType="light"
+            enableHaptic={false}
             scaleAmount={0.97}
           >
             <Text style={[styles.secondaryButtonText, { 
