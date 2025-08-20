@@ -117,13 +117,23 @@ export const SettlementScreen: React.FC = () => {
     const backHandler = BackHandler.addEventListener(
       'hardwareBackPress',
       () => {
-        setShowBackConfirmation(true);
+        // Only show confirmation for session end, not for viewing historical settlements
+        if (isSessionEnd) {
+          setShowBackConfirmation(true);
+        } else {
+          // For historical settlements, just go back normally
+          if (fromScreen === 'SessionHistory') {
+            navigation.navigate('SessionHistory');
+          } else {
+            navigation.goBack();
+          }
+        }
         return true; // Prevent default back action
       }
     );
 
     return () => backHandler.remove();
-  }, []);
+  }, [isSessionEnd, fromScreen, navigation]);
 
   const handleShareComplete = (result: ShareResult) => {
     if (result.success) {
@@ -316,29 +326,19 @@ export const SettlementScreen: React.FC = () => {
         </TouchableOpacity>
       </View>
       
-      {/* Back Navigation Confirmation Dialog */}
-      <ConfirmationDialog
-        visible={showBackConfirmation}
-        title={isSessionEnd 
-          ? "Complete Settlement?" 
-          : fromScreen === 'SessionHistory' 
-            ? "Return to History?" 
-            : "Return to Game?"}
-        message={isSessionEnd 
-          ? "Are you sure you want to complete the settlement and return to home?" 
-          : fromScreen === 'SessionHistory'
-            ? "Are you sure you want to return to the session history?"
-            : "Are you sure you want to return to the active session?"}
-        confirmText={isSessionEnd 
-          ? "Complete" 
-          : fromScreen === 'SessionHistory' 
-            ? "Back to History" 
-            : "Return"}
-        cancelText="Stay"
-        confirmStyle="default"
-        onConfirm={confirmBackNavigation}
-        onCancel={() => setShowBackConfirmation(false)}
-      />
+      {/* Back Navigation Confirmation Dialog - Only for session end */}
+      {isSessionEnd && (
+        <ConfirmationDialog
+          visible={showBackConfirmation}
+          title="Complete Settlement?"
+          message="Are you sure you want to complete the settlement and return to home?"
+          confirmText="Complete"
+          cancelText="Stay"
+          confirmStyle="default"
+          onConfirm={confirmBackNavigation}
+          onCancel={() => setShowBackConfirmation(false)}
+        />
+      )}
     </ScrollView>
   );
 };

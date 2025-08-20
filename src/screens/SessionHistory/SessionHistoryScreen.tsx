@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { View, Text, StyleSheet, SafeAreaView } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
@@ -12,6 +12,19 @@ type SessionHistoryScreenNavigationProp = StackNavigationProp<RootStackParamList
 export const SessionHistoryScreen: React.FC = () => {
   const navigation = useNavigation<SessionHistoryScreenNavigationProp>();
   const { isDarkMode } = useTheme();
+
+  // Intercept ALL back actions and redirect to Home
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('beforeRemove', (e) => {
+      // Prevent the default behavior
+      e.preventDefault();
+      
+      // Simply navigate to Home - much safer than reset
+      navigation.navigate('Home');
+    });
+
+    return unsubscribe;
+  }, [navigation]);
   
   const handleSessionSelect = (sessionId: string) => {
     // Note: SessionDetails screen doesn't exist in current navigation
