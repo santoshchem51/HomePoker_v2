@@ -61,12 +61,14 @@ const VoiceInputButton: React.FC<{
           console.error('Voice recognition error:', error);
           setIsRecording(false);
           
-          // Fallback to manual input on error
+          // Show single, clear error message
           showToast({
             type: 'error',
-            title: '❌ Voice Recognition Error',
-            message: `${error}. Please enter text manually.`,
-            duration: 4000,
+            title: 'Voice Input Unavailable',
+            message: error.includes('emulator') ? 
+              'Voice input requires a physical device with microphone.' :
+              'Voice input not available. Please type manually.',
+            duration: 3000,
           });
         },
         onEnd: () => {
@@ -77,13 +79,8 @@ const VoiceInputButton: React.FC<{
 
       if (!started) {
         setIsRecording(false);
-        // Voice not available, fallback to manual
-        showToast({
-          type: 'info',
-          title: '🎤 Voice Not Available',
-          message: 'Voice recognition is not available. Please type manually.',
-          duration: 3000,
-        });
+        // Voice not available, show helpful message without duplicate error
+        console.log('Voice service failed to start - user will see error from onError callback');
       }
     }
   };

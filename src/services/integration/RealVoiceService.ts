@@ -78,6 +78,7 @@ export class RealVoiceService {
   public async isAvailable(): Promise<boolean> {
     try {
       const available = await Voice.isAvailable();
+      console.log('Voice.isAvailable() result:', available);
       return available === 1;
     } catch (error) {
       console.warn('Voice availability check failed:', error);
@@ -97,7 +98,7 @@ export class RealVoiceService {
     // Check if voice recognition is available
     const available = await this.isAvailable();
     if (!available) {
-      const error = 'Voice recognition is not available on this device';
+      const error = 'Voice recognition is not supported on this device or emulator. Please use manual text input.';
       console.warn(error);
       callbacks.onError?.(error);
       return false;
