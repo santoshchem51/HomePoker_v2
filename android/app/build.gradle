@@ -82,8 +82,8 @@ android {
         applicationId "com.pokepot"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 2
-        versionName "1.0.1"
+        versionCode 3
+        versionName "1.0.2"
         
         // Production optimizations
         multiDexEnabled true
@@ -132,8 +132,8 @@ android {
         release {
             // Production release configuration
             signingConfig signingConfigs.release
-            minifyEnabled false
-            shrinkResources false
+            minifyEnabled true
+            shrinkResources true
             proguardFiles getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro"
             
             // Bundle optimization

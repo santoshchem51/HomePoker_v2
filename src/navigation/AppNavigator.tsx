@@ -79,7 +79,9 @@ export default function AppNavigator() {
           component={LiveGameScreen}
           options={({ route }) => ({ 
             title: route.params?.sessionName || 'Live Game',
-            headerBackTitle: 'Session'
+            headerBackTitle: 'Session',
+            gestureEnabled: false,       // Disable swipe back gestures
+            headerLeft: () => null,      // Remove back button from header
           })}
         />
         <Stack.Screen 
@@ -88,7 +90,8 @@ export default function AppNavigator() {
           options={({ route }) => ({ 
             title: `${route.params?.sessionName || 'Session'} Settlement`,
             headerBackTitle: 'Game',
-            headerLeft: route.params?.isSessionEnd ? () => null : undefined
+            gestureEnabled: false,       // Disable swipe back gestures
+            headerLeft: () => null,      // Remove back button from header (all cases)
           })}
         />
         <Stack.Screen 

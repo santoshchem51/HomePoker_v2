@@ -14,6 +14,8 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
+  BackHandler,
+  Alert,
 } from 'react-native';
 import { showToast } from '../../components/common/ToastManager';
 import { ConfirmationDialog } from '../../components/common/ConfirmationDialog';
@@ -106,6 +108,26 @@ const LiveGameScreenComponent: React.FC = () => {
       loadSessionState(sessionId);
     }
   }, [sessionId, loadSessionState]);
+
+  // Handle hardware back button (Android)
+  useEffect(() => {
+    const backHandler = BackHandler.addEventListener(
+      'hardwareBackPress',
+      () => {
+        Alert.alert(
+          'End Session?',
+          'Are you sure you want to leave the active poker session?',
+          [
+            { text: 'Stay', style: 'cancel' },
+            { text: 'End Session', style: 'destructive', onPress: handleEndSession }
+          ]
+        );
+        return true; // Prevent default back action
+      }
+    );
+
+    return () => backHandler.remove();
+  }, [handleEndSession]);
 
   // Player action button handlers
   const handleBuyInPress = useCallback((playerId: string) => {

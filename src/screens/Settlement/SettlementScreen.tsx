@@ -12,6 +12,8 @@ import {
   StyleSheet,
   TouchableOpacity,
   ActivityIndicator,
+  BackHandler,
+  Alert,
 } from 'react-native';
 import { showToast } from '../../components/common/ToastManager';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
@@ -106,6 +108,39 @@ export const SettlementScreen: React.FC = () => {
   useEffect(() => {
     loadSettlement();
   }, [loadSettlement]);
+
+  // Handle hardware back button (Android)
+  useEffect(() => {
+    const backHandler = BackHandler.addEventListener(
+      'hardwareBackPress',
+      () => {
+        if (isSessionEnd) {
+          // For session end settlements, confirm navigation back to home
+          Alert.alert(
+            'Complete Settlement?',
+            'Are you sure you want to complete the settlement and return to home?',
+            [
+              { text: 'Stay', style: 'cancel' },
+              { text: 'Complete', style: 'default', onPress: handleBackToHome }
+            ]
+          );
+        } else {
+          // For mid-session settlements, confirm return to game
+          Alert.alert(
+            'Return to Game?',
+            'Are you sure you want to return to the active session?',
+            [
+              { text: 'Stay', style: 'cancel' },
+              { text: 'Return', style: 'default', onPress: () => navigation.goBack() }
+            ]
+          );
+        }
+        return true; // Prevent default back action
+      }
+    );
+
+    return () => backHandler.remove();
+  }, [isSessionEnd, handleBackToHome, navigation]);
 
   const handleShareComplete = (result: ShareResult) => {
     if (result.success) {
